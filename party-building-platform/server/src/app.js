@@ -13,8 +13,6 @@ const adminRoutes = require('./routes/admin');
 
 const app = express();
 
-db.initDatabase();
-
 app.use(cors());
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
@@ -40,18 +38,30 @@ app.use((err, req, res, next) => {
   res.status(500).json({ code: 500, message: '服务器内部错误', error: err.message });
 });
 
-app.listen(config.port, () => {
-  console.log(`
+async function start() {
+  try {
+    await db.initDatabase();
+  } catch (e) {
+    console.error('数据库初始化异常：', e.message);
+  }
+
+  app.listen(config.port, () => {
+    const dbMode = db.useMySQL ? 'MySQL' : 'JSON 文件';
+    console.log(`
   ╔══════════════════════════════════════════════════════════╗
   ║                                                          ║
   ║   党建平台后端服务已启动                                  ║
   ║                                                          ║
   ║   服务地址: http://localhost:${config.port}                       ║
   ║   API 前缀: /api                                         ║
+  ║   数据库: ${dbMode}                                      ║
   ║                                                          ║
   ║   默认管理员账号: admin / admin123                       ║
   ║   默认普通用户账号: zhangsan / user123                   ║
   ║                                                          ║
   ╚══════════════════════════════════════════════════════════╝
   `);
-});
+  });
+}
+
+start();

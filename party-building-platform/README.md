@@ -1,58 +1,65 @@
 # 党建平台 - 学习与活动管理系统
 
-一个基于 Vue3 + Node.js + Express 的党建平台学习与活动管理网站。
+基于 Vue3 + Vite + TypeScript + Node.js + Express + MySQL 的党建平台学习与活动管理网站。
 
 ## 项目模块
 
-- **学习专栏**：党建文章浏览、分类筛选、学习记录
-- **活动报名**：活动列表、在线报名、报名管理
-- **积分排行**：积分排行榜、个人积分记录
-- **支部通知**：通知公告列表、详情查看
-- **后台内容管理**：文章、活动、通知、用户管理
-- **鉴权接口**：用户注册、登录、JWT 认证
+- **学习专栏**：党建文章浏览、分类筛选、阅读记录、学习积分
+- **活动报名**：活动列表、在线报名、报名管理、我的活动
+- **积分排行**：积分排行榜、个人积分记录、党支部筛选
+- **支部通知**：通知公告列表、详情查看、类型筛选
+- **后台内容管理**：文章/活动/通知/用户 CRUD、报名审核
+- **鉴权接口**：用户注册、登录、JWT 认证、角色权限控制
 
 ## 技术栈
 
 ### 前端
-- Vue 3 + TypeScript
-- Vite 构建工具
-- Vue Router 4（路由）
+- Vue 3.4 + TypeScript
+- Vite 5
+- Vue Router 4
 - Pinia（状态管理）
 - Axios（HTTP 请求）
 
 ### 后端
 - Node.js + Express
-- JSON 文件数据库（无需安装数据库）
+- **MySQL**（主数据库）
+- 自动降级：未配置 MySQL 时自动使用 JSON 文件数据库
 - JWT（身份认证）
 - bcryptjs（密码加密）
-- CORS（跨域支持）
 
 ## 目录结构
 
 ```
 party-building-platform/
-├── client/                 # 前端项目
-│   ├── public/
+├── client/                          # 前端项目
 │   ├── src/
-│   │   ├── api/            # API 接口
-│   │   ├── components/     # 公共组件
-│   │   ├── router/         # 路由配置
-│   │   ├── stores/         # Pinia 状态管理
-│   │   ├── views/          # 页面视图
+│   │   ├── api/                      # API 接口模块
+│   │   ├── layouts/                  # 布局组件
+│   │   ├── router/                   # 路由配置
+│   │   ├── stores/                   # Pinia 状态管理
+│   │   ├── styles/                   # 全局样式
+│   │   ├── types/                    # TypeScript 类型定义
+│   │   ├── utils/                    # 工具函数
+│   │   ├── views/                    # 页面组件
+│   │   │   ├── admin/                # 后台管理页面
+│   │   │   └── *.vue                 # 前台页面
 │   │   ├── App.vue
 │   │   └── main.ts
-│   ├── index.html
-│   ├── package.json
-│   ├── tsconfig.json
-│   └── vite.config.ts
-├── server/                 # 后端项目
-│   ├── data/               # 数据库文件（自动生成）
+│   └── package.json
+├── server/                          # 后端项目
+│   ├── data/                         # JSON 数据库（可选，MySQL 不可用时自动生成）
 │   ├── src/
-│   │   ├── database/       # 数据库模块
-│   │   ├── middleware/     # 中间件
-│   │   ├── routes/         # 路由模块
-│   │   ├── config.js       # 配置文件
-│   │   └── app.js          # 入口文件
+│   │   ├── config/                   # 配置
+│   │   ├── database/                 # 数据库层（MySQL + JSON 双模式）
+│   │   ├── middleware/               # 中间件
+│   │   ├── routes/                   # 路由模块
+│   │   │   ├── auth.js
+│   │   │   ├── articles.js
+│   │   │   ├── activities.js
+│   │   │   ├── points.js
+│   │   │   ├── notices.js
+│   │   │   └── admin.js
+│   │   └── app.js                    # 入口文件
 │   └── package.json
 └── README.md
 ```
@@ -61,8 +68,38 @@ party-building-platform/
 
 ### 环境要求
 - Node.js >= 16.x
+- MySQL >= 5.7（可选，不配置则自动使用 JSON 文件数据库）
 
-### 1. 启动后端服务
+---
+
+### 方式一：使用 MySQL（推荐）
+
+#### 1. 配置 MySQL 环境变量
+
+在 `server` 目录下创建 `.env` 文件或直接设置环境变量：
+
+```bash
+# 必须设置为 mysql 才会启用 MySQL
+DB_TYPE=mysql
+DB_HOST=localhost
+DB_PORT=3306
+DB_USER=root
+DB_PASSWORD=your_password
+DB_NAME=party_building
+```
+
+或者直接在命令行指定：
+
+```bash
+export DB_TYPE=mysql
+export DB_HOST=localhost
+export DB_USER=root
+export DB_PASSWORD=your_password
+```
+
+> 首次启动会自动创建数据库、建表、导入示例数据。
+
+#### 2. 启动后端服务
 
 ```bash
 cd server
@@ -70,9 +107,7 @@ npm install
 npm start
 ```
 
-后端服务将在 http://localhost:3000 启动
-
-### 2. 启动前端服务
+#### 3. 启动前端服务
 
 ```bash
 cd client
@@ -80,7 +115,25 @@ npm install
 npm run dev
 ```
 
-前端服务将在 http://localhost:5173 启动（如果端口被占用会自动切换）
+---
+
+### 方式二：零配置快速启动（无需 MySQL）
+
+无需任何数据库，直接启动即可（自动使用 JSON 文件数据库）：
+
+```bash
+# 后端
+cd server && npm install && npm start
+
+# 前端（新开一个终端）
+cd client && npm install && npm run dev
+```
+
+- 后端默认端口：`http://localhost:3000`
+- 前端默认端口：`http://localhost:5173`（被占用时自动切换）
+- JSON 数据存储在 `server/data/db.json`
+
+---
 
 ## 默认账号
 
@@ -91,69 +144,91 @@ npm run dev
 | 普通用户 | lisi | 123456 |
 | 普通用户 | wangwu | 123456 |
 
+## 构建生产版本
+
+```bash
+# 前端打包（输出到 client/dist）
+cd client
+npm run build
+
+# 仅类型检查
+npm run typecheck
+```
+
 ## API 接口
 
-### 鉴权接口
-- `POST /api/auth/register` - 用户注册
-- `POST /api/auth/login` - 用户登录
-- `GET /api/auth/profile` - 获取个人信息
-- `PUT /api/auth/profile` - 更新个人信息
-- `POST /api/auth/logout` - 退出登录
+所有接口前缀：`/api`
+
+### 鉴权
+| 方法 | 路径 | 说明 | 认证 |
+|------|------|------|------|
+| POST | /auth/register | 注册 | 否 |
+| POST | /auth/login | 登录 | 否 |
+| GET | /auth/profile | 获取个人信息 | 是 |
+| PUT | /auth/profile | 更新个人信息 | 是 |
+| POST | /auth/logout | 退出登录 | 是 |
 
 ### 学习专栏
-- `GET /api/articles` - 获取文章列表
-- `GET /api/articles/categories` - 获取文章分类
-- `GET /api/articles/:id` - 获取文章详情
-- `POST /api/articles/:id/read` - 记录阅读
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| GET | /articles | 文章列表（支持 category、keyword、page、page_size） |
+| GET | /articles/categories | 文章分类 |
+| GET | /articles/:id | 文章详情（自动累加阅读量） |
+| POST | /articles/:id/read | 记录阅读（>=30秒奖励积分） |
 
 ### 活动报名
-- `GET /api/activities` - 获取活动列表
-- `GET /api/activities/:id` - 获取活动详情
-- `POST /api/activities/:id/signup` - 活动报名
-- `POST /api/activities/:id/cancel` - 取消报名
-- `GET /api/activities/my/list` - 我的活动报名
+| 方法 | 路径 | 说明 | 认证 |
+|------|------|------|------|
+| GET | /activities | 活动列表 | 否 |
+| GET | /activities/:id | 活动详情 | 是 |
+| POST | /activities/:id/signup | 活动报名 | 是 |
+| POST | /activities/:id/cancel | 取消报名 | 是 |
+| GET | /activities/my/list | 我的活动 | 是 |
 
 ### 积分排行
-- `GET /api/points/ranking` - 积分排行榜
-- `GET /api/points/my-records` - 我的积分记录
-- `GET /api/points/branches` - 党支部列表
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| GET | /points/ranking | 积分排行榜（支持 branch、page、page_size） |
+| GET | /points/my-records | 我的积分记录 |
+| GET | /points/branches | 党支部列表 |
 
 ### 支部通知
-- `GET /api/notices` - 获取通知列表
-- `GET /api/notices/types` - 获取通知类型
-- `GET /api/notices/:id` - 获取通知详情
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| GET | /notices | 通知列表（支持 type、page、page_size） |
+| GET | /notices/types | 通知类型 |
+| GET | /notices/:id | 通知详情 |
 
-### 后台管理
-- `GET /api/admin/stats` - 数据统计
-- `GET /api/admin/articles` - 文章管理列表
-- `POST /api/admin/articles` - 创建文章
-- `PUT /api/admin/articles/:id` - 更新文章
-- `DELETE /api/admin/articles/:id` - 删除文章
-- `GET /api/admin/activities` - 活动管理列表
-- `POST /api/admin/activities` - 创建活动
-- `PUT /api/admin/activities/:id` - 更新活动
-- `DELETE /api/admin/activities/:id` - 删除活动
-- `GET /api/admin/notices` - 通知管理列表
-- `POST /api/admin/notices` - 创建通知
-- `PUT /api/admin/notices/:id` - 更新通知
-- `DELETE /api/admin/notices/:id` - 删除通知
-- `GET /api/admin/users` - 用户列表
-- `PUT /api/admin/users/:id/points` - 调整用户积分
-- `DELETE /api/admin/users/:id` - 删除用户
-- `GET /api/admin/activity-signups/:activityId` - 活动报名列表
-- `PUT /api/admin/activity-signups/:id/status` - 审核报名
+### 后台管理（需管理员）
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| GET | /admin/stats | 数据统计 |
+| GET/POST/PUT/DELETE | /admin/articles[/:id] | 文章管理 |
+| GET/POST/PUT/DELETE | /admin/activities[/:id] | 活动管理 |
+| GET/POST/PUT/DELETE | /admin/notices[/:id] | 通知管理 |
+| GET/DELETE | /admin/users[/:id] | 用户列表 / 删除 |
+| PUT | /admin/users/:id/points | 调整用户积分 |
+| GET | /admin/activity-signups/:activityId | 报名名单 |
+| PUT | /admin/activity-signups/:id/status | 审核报名（approved/rejected/cancelled） |
 
 ## 核心功能演示
 
-1. **首页浏览**：查看最新文章、热门活动、支部通知、积分排行
-2. **文章学习**：浏览学习专栏文章，分类筛选
-3. **活动报名**：查看活动详情，在线报名
-4. **积分排行**：查看党员积分排名情况
-5. **通知公告**：查看支部最新通知
-6. **后台管理**：管理员登录后可管理文章、活动、通知、用户
+1. **首页浏览**：最新文章、热门活动、支部通知、积分排行
+2. **学习专栏**：浏览党建文章、分类筛选、阅读得积分
+3. **活动报名**：查看活动详情、在线报名、取消报名
+4. **积分排行**：党员积分排名、党支部筛选、个人积分记录
+5. **支部通知**：查看最新通知公告、类型筛选
+6. **后台管理**（admin/admin123）：
+   - 仪表盘：数据总览、最近报名
+   - 文章管理：增删改查
+   - 活动管理：增删改查、查看报名、审核通过自动发积分
+   - 通知管理：增删改查、优先级排序
+   - 用户管理：用户列表、调整积分、删除用户
+7. **鉴权流程**：注册 → 登录 → JWT 自动续期 → 角色权限控制
 
 ## 注意事项
 
-- 本项目使用 JSON 文件作为数据库，数据存储在 `server/data/db.json` 文件中
-- 如需重置数据，删除 `server/data/db.json` 文件后重启后端服务即可
-- 首次启动后端时会自动初始化数据库和示例数据
+- 双模式数据库：配置 `DB_TYPE=mysql` 启用 MySQL，否则使用 JSON 文件
+- 首次启动后端会自动初始化数据库和示例数据
+- 重置数据：删除 `server/data/db.json`（JSON 模式）或清空 MySQL 对应数据库
+- 生产部署时请修改 `JWT_SECRET` 环境变量

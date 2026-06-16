@@ -4,7 +4,7 @@ module.exports = {
   jwtExpiresIn: '7d',
   pageSize: 10,
   db: {
-    useMySQL: process.env.DB_TYPE === 'mysql',
+    useMySQL: process.env.DB_TYPE !== 'json',
     mysql: {
       host: process.env.DB_HOST || 'localhost',
       port: parseInt(process.env.DB_PORT) || 3306,

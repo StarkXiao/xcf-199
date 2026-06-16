@@ -22,8 +22,8 @@
 
 ### 后端
 - Node.js + Express
-- **MySQL**（主数据库）
-- 自动降级：未配置 MySQL 时自动使用 JSON 文件数据库
+- **MySQL（默认）**：自动建库、建表、导入示例数据
+- **自动降级**：MySQL 连接失败时自动回退到 JSON 文件数据库
 - JWT（身份认证）
 - bcryptjs（密码加密）
 
@@ -68,60 +68,44 @@ party-building-platform/
 
 ### 环境要求
 - Node.js >= 16.x
-- MySQL >= 5.7（可选，不配置则自动使用 JSON 文件数据库）
+- MySQL >= 5.7（推荐，已默认启用；连接失败自动降级为 JSON 文件）
 
 ---
 
-### 方式一：使用 MySQL（推荐）
+### 方式一：默认方式（MySQL，推荐）
 
-#### 1. 配置 MySQL 环境变量
-
-在 `server` 目录下创建 `.env` 文件或直接设置环境变量：
+无需特殊配置，直接启动即可（默认连接本地 MySQL，root 无密码）：
 
 ```bash
-# 必须设置为 mysql 才会启用 MySQL
-DB_TYPE=mysql
-DB_HOST=localhost
-DB_PORT=3306
-DB_USER=root
-DB_PASSWORD=your_password
-DB_NAME=party_building
+# 后端
+cd server && npm install && npm start
+
+# 前端（新开一个终端）
+cd client && npm install && npm run dev
 ```
 
-或者直接在命令行指定：
+> 首次启动会自动创建 `party_building` 数据库、建表、导入示例数据。
+
+如需自定义 MySQL 连接：
 
 ```bash
-export DB_TYPE=mysql
+# 可选环境变量
 export DB_HOST=localhost
+export DB_PORT=3306
 export DB_USER=root
 export DB_PASSWORD=your_password
-```
-
-> 首次启动会自动创建数据库、建表、导入示例数据。
-
-#### 2. 启动后端服务
-
-```bash
-cd server
-npm install
-npm start
-```
-
-#### 3. 启动前端服务
-
-```bash
-cd client
-npm install
-npm run dev
+export DB_NAME=party_building
 ```
 
 ---
 
-### 方式二：零配置快速启动（无需 MySQL）
+### 方式二：零配置快速启动（JSON 文件模式）
 
-无需任何数据库，直接启动即可（自动使用 JSON 文件数据库）：
+如果没有 MySQL，设置环境变量后启动即可：
 
 ```bash
+export DB_TYPE=json
+
 # 后端
 cd server && npm install && npm start
 
@@ -228,7 +212,9 @@ npm run typecheck
 
 ## 注意事项
 
-- 双模式数据库：配置 `DB_TYPE=mysql` 启用 MySQL，否则使用 JSON 文件
+- **数据库模式**：默认使用 MySQL；设置 `DB_TYPE=json` 则使用 JSON 文件数据库
+- **自动降级**：MySQL 连接失败时自动回退到 JSON 文件模式，保证服务可用
 - 首次启动后端会自动初始化数据库和示例数据
-- 重置数据：删除 `server/data/db.json`（JSON 模式）或清空 MySQL 对应数据库
+- 重置数据：删除 `server/data/db.json`（JSON 模式）或 `DROP DATABASE party_building`（MySQL 模式）
 - 生产部署时请修改 `JWT_SECRET` 环境变量
+- 服务启动顺序：先完成数据库初始化，再监听端口接收请求

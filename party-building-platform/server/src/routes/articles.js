@@ -26,7 +26,7 @@ router.get('/', async (req, res) => {
 
     let sql = 'SELECT * FROM articles WHERE status = ?';
     const params = ['published'];
-    const countSql = 'SELECT COUNT(*) as c FROM articles WHERE status = ?';
+    let countSql = 'SELECT COUNT(*) as c FROM articles WHERE status = ?';
     const countParams = ['published'];
 
     if (category) {

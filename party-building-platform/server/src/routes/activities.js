@@ -1,7 +1,7 @@
 const express = require('express');
 const db = require('../database');
 const config = require('../config');
-const { authMiddleware } = require('../middleware/auth');
+const { authMiddleware, optionalAuthMiddleware } = require('../middleware/auth');
 
 const router = express.Router();
 
@@ -73,7 +73,7 @@ router.get('/', async (req, res) => {
   }
 });
 
-router.get('/:id', authMiddleware, async (req, res) => {
+router.get('/:id', optionalAuthMiddleware, async (req, res) => {
   try {
     const { id } = req.params;
     const activityId = parseInt(id);
@@ -81,6 +81,19 @@ router.get('/:id', authMiddleware, async (req, res) => {
     const activity = await db.getById('activities', activityId);
     if (!activity) {
       return res.status(404).json({ code: 404, message: '活动不存在' });
+    }
+
+    const signupCount = await getSignupCount(activityId);
+
+    if (!req.user) {
+      return res.json({
+        code: 200,
+        message: '获取成功',
+        data: {
+          ...activity,
+          signup_count: signupCount
+        }
+      });
     }
 
     const signup = await db.findOne(
@@ -95,7 +108,7 @@ router.get('/:id', authMiddleware, async (req, res) => {
       message: '获取成功',
       data: {
         ...activity,
-        signup_count: await getSignupCount(activityId),
+        signup_count: signupCount,
         is_signed_up: signup ? true : false,
         signup_status: signup ? signup.status : null
       }

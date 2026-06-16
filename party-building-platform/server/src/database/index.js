@@ -174,6 +174,21 @@ async function initMySQL() {
     console.log('MySQL 数据库初始化完成');
     return true;
   } catch (e) {
+    if (config.db.strictMySQL) {
+      console.error('========================================');
+      console.error('  MySQL 连接失败（严格模式，不回退到 JSON）');
+      console.error('  错误信息：', e.message);
+      console.error('========================================');
+      console.error('');
+      console.error('请检查：');
+      console.error('  1. MySQL 服务是否启动');
+      console.error('  2. 配置文件 server/.env 中的连接信息是否正确');
+      console.error('  3. 数据库用户是否有足够权限');
+      console.error('');
+      console.error('如需使用 JSON 文件模式，请设置：DB_TYPE=json');
+      console.error('');
+      process.exit(1);
+    }
     console.error('MySQL 连接/初始化失败，回退到 JSON 文件数据库：', e.message);
     useMySQL = false;
     pool = null;

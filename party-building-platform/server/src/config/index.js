@@ -1,3 +1,5 @@
+require('dotenv').config();
+
 module.exports = {
   port: process.env.PORT || 3000,
   jwtSecret: process.env.JWT_SECRET || 'party-building-platform-secret-key',
@@ -5,6 +7,7 @@ module.exports = {
   pageSize: 10,
   db: {
     useMySQL: process.env.DB_TYPE !== 'json',
+    strictMySQL: process.env.DB_TYPE === 'mysql',
     mysql: {
       host: process.env.DB_HOST || 'localhost',
       port: parseInt(process.env.DB_PORT) || 3306,

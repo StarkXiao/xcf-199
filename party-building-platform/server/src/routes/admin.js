@@ -126,21 +126,22 @@ router.post('/articles', async (req, res) => {
 router.put('/articles/:id', async (req, res) => {
   try {
     const { id } = req.params;
-    const { title, content, category, cover_image, author, status } = req.body;
+    const { title, content, category, cover_image, author, status, views } = req.body;
     const article = await db.getById('articles', parseInt(id));
     if (!article) return res.status(404).json({ code: 404, message: '文章不存在' });
 
-    const finalTitle = title || article.title;
-    const finalContent = content || article.content;
+    const finalTitle = title !== undefined ? title : article.title;
+    const finalContent = content !== undefined ? content : article.content;
     const finalCategory = category !== undefined ? category : article.category;
     const finalCover = cover_image !== undefined ? cover_image : article.cover_image;
     const finalAuthor = author !== undefined ? author : article.author;
-    const finalStatus = status || article.status;
+    const finalStatus = status !== undefined ? status : article.status;
+    const finalViews = views !== undefined ? views : article.views;
 
     const updated = await db.update(
       'articles', parseInt(id), {},
-      'UPDATE articles SET title = ?, content = ?, category = ?, cover_image = ?, author = ?, status = ? WHERE id = ?',
-      [finalTitle, finalContent, finalCategory, finalCover, finalAuthor, finalStatus]
+      'UPDATE articles SET title = ?, content = ?, category = ?, cover_image = ?, author = ?, status = ?, views = ? WHERE id = ?',
+      [finalTitle, finalContent, finalCategory, finalCover, finalAuthor, finalStatus, finalViews]
     );
     res.json({ code: 200, message: '更新成功', data: updated });
   } catch (err) {

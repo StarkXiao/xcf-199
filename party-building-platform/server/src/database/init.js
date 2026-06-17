@@ -157,6 +157,79 @@ function initDatabase() {
       FOREIGN KEY (development_id) REFERENCES party_development(id) ON DELETE CASCADE,
       FOREIGN KEY (operator_id) REFERENCES users(id) ON DELETE SET NULL
     );
+
+    CREATE TABLE IF NOT EXISTS volunteer_projects (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      title TEXT NOT NULL,
+      description TEXT NOT NULL,
+      cover_image TEXT,
+      category TEXT,
+      location TEXT,
+      start_time DATETIME,
+      end_time DATETIME,
+      signup_deadline DATETIME,
+      max_participants INTEGER,
+      points_per_hour INTEGER DEFAULT 5,
+      service_hours INTEGER DEFAULT 0,
+      organizer TEXT,
+      contact_person TEXT,
+      contact_phone TEXT,
+      status TEXT DEFAULT 'recruiting',
+      views INTEGER DEFAULT 0,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE TABLE IF NOT EXISTS volunteer_signups (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL,
+      project_id INTEGER NOT NULL,
+      status TEXT DEFAULT 'pending',
+      apply_reason TEXT,
+      skills TEXT,
+      reviewed_by INTEGER,
+      review_opinion TEXT,
+      reviewed_at DATETIME,
+      signed_up_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+      FOREIGN KEY (project_id) REFERENCES volunteer_projects(id) ON DELETE CASCADE,
+      UNIQUE(user_id, project_id)
+    );
+
+    CREATE TABLE IF NOT EXISTS volunteer_service_records (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      signup_id INTEGER NOT NULL,
+      user_id INTEGER NOT NULL,
+      project_id INTEGER NOT NULL,
+      service_date DATE,
+      start_time DATETIME,
+      end_time DATETIME,
+      actual_hours DECIMAL(4,1) DEFAULT 0,
+      task_description TEXT,
+      recorded_by INTEGER,
+      points_awarded INTEGER DEFAULT 0,
+      status TEXT DEFAULT 'confirmed',
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (signup_id) REFERENCES volunteer_signups(id) ON DELETE CASCADE,
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+      FOREIGN KEY (project_id) REFERENCES volunteer_projects(id) ON DELETE CASCADE
+    );
+
+    CREATE TABLE IF NOT EXISTS volunteer_reviews (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL,
+      project_id INTEGER NOT NULL,
+      rating INTEGER DEFAULT 5,
+      content TEXT,
+      is_anonymous INTEGER DEFAULT 0,
+      reply_content TEXT,
+      reply_by INTEGER,
+      reply_at DATETIME,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+      FOREIGN KEY (project_id) REFERENCES volunteer_projects(id) ON DELETE CASCADE,
+      UNIQUE(user_id, project_id)
+    );
   `);
 
   const adminHash = bcrypt.hashSync('admin123', 10);
@@ -412,6 +485,195 @@ function initDatabase() {
 
   pointRecords.forEach(record => {
     insertPointsRecord.run(record.userId, record.points, record.reason, record.type);
+  });
+
+  const insertVolunteerProject = db.prepare(`
+    INSERT OR IGNORE INTO volunteer_projects (title, description, cover_image, category, location, start_time, end_time, signup_deadline, max_participants, points_per_hour, service_hours, organizer, contact_person, contact_phone, status, views)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `);
+
+  const volunteerProjects = [
+    {
+      title: '社区环境清洁志愿服务',
+      description: '组织志愿者深入社区开展环境清洁活动，清理公共区域垃圾，美化社区环境，倡导文明新风尚。活动内容包括：街道清扫、绿化带清理、小广告清除等。',
+      cover: 'https://images.unsplash.com/photo-1559027615-cd4628902d4a?w=800',
+      category: '环境保护',
+      location: '阳光社区各小区',
+      start_time: addDays(now, 5),
+      end_time: addDays(now, 5),
+      signup_deadline: addDays(now, 3),
+      max_participants: 30,
+      points_per_hour: 5,
+      service_hours: 4,
+      organizer: '志愿者协会',
+      contact_person: '王老师',
+      contact_phone: '13800000001',
+      status: 'recruiting',
+      views: 156
+    },
+    {
+      title: '关爱老人暖心陪伴服务',
+      description: '走进敬老院和社区独居老人家中，为老人提供陪伴聊天、心理慰藉、生活照料等志愿服务，让老人感受社会温暖。',
+      cover: 'https://images.unsplash.com/photo-1516307365426-bea591f05011?w=800',
+      category: '敬老爱老',
+      location: '幸福敬老院',
+      start_time: addDays(now, 10),
+      end_time: addDays(now, 10),
+      signup_deadline: addDays(now, 7),
+      max_participants: 20,
+      points_per_hour: 6,
+      service_hours: 5,
+      organizer: '青年志愿者协会',
+      contact_person: '李主任',
+      contact_phone: '13800000002',
+      status: 'recruiting',
+      views: 234
+    },
+    {
+      title: '义务支教助学活动',
+      description: '组织有教学经验的志愿者前往乡村学校开展义务支教活动，为乡村学生提供学业辅导、兴趣培养、心理疏导等服务。',
+      cover: 'https://images.unsplash.com/photo-1497633762265-9d179a990aa6?w=800',
+      category: '教育支持',
+      location: '希望小学',
+      start_time: addDays(now, 20),
+      end_time: addDays(now, 22),
+      signup_deadline: addDays(now, 15),
+      max_participants: 15,
+      points_per_hour: 8,
+      service_hours: 24,
+      organizer: '教育志愿者联盟',
+      contact_person: '张老师',
+      contact_phone: '13800000003',
+      status: 'recruiting',
+      views: 312
+    },
+    {
+      title: '图书馆志愿服务',
+      description: '在市图书馆开展读者引导、图书整理、阅读推广等志愿服务工作，助力书香城市建设。',
+      cover: 'https://images.unsplash.com/photo-1507842217343-583bb7270b66?w=800',
+      category: '文化服务',
+      location: '市图书馆',
+      start_time: addDays(now, -5),
+      end_time: addDays(now, -2),
+      signup_deadline: addDays(now, -8),
+      max_participants: 25,
+      points_per_hour: 4,
+      service_hours: 24,
+      organizer: '市图书馆',
+      contact_person: '刘馆长',
+      contact_phone: '13800000004',
+      status: 'completed',
+      views: 445
+    },
+    {
+      title: '交通文明劝导志愿服务',
+      description: '在主要交通路口开展交通文明劝导活动，引导行人和车辆遵守交通规则，维护交通秩序，提升城市文明形象。',
+      cover: 'https://images.unsplash.com/photo-1581092918056-0c4c3acd3789?w=800',
+      category: '文明劝导',
+      location: '各主要交通路口',
+      start_time: addDays(now, 15),
+      end_time: addDays(now, 15),
+      signup_deadline: addDays(now, 12),
+      max_participants: 40,
+      points_per_hour: 5,
+      service_hours: 6,
+      organizer: '文明办',
+      contact_person: '陈主任',
+      contact_phone: '13800000005',
+      status: 'recruiting',
+      views: 178
+    },
+    {
+      title: '疫情防控志愿服务',
+      description: '协助社区和医疗机构开展疫情防控工作，包括体温检测、信息登记、防疫宣传、物资配送等志愿服务。',
+      cover: 'https://images.unsplash.com/photo-1584036561566-baf8f5f1b144?w=800',
+      category: '公共卫生',
+      location: '各社区服务站',
+      start_time: addDays(now, -10),
+      end_time: addDays(now, -6),
+      signup_deadline: addDays(now, -12),
+      max_participants: 50,
+      points_per_hour: 7,
+      service_hours: 40,
+      organizer: '卫健委',
+      contact_person: '周医生',
+      contact_phone: '13800000006',
+      status: 'completed',
+      views: 567
+    }
+  ];
+
+  volunteerProjects.forEach(project => {
+    insertVolunteerProject.run(
+      project.title,
+      project.description,
+      project.cover,
+      project.category,
+      project.location,
+      project.start_time,
+      project.end_time,
+      project.signup_deadline,
+      project.max_participants,
+      project.points_per_hour,
+      project.service_hours,
+      project.organizer,
+      project.contact_person,
+      project.contact_phone,
+      project.status,
+      project.views
+    );
+  });
+
+  const insertVolunteerSignup = db.prepare(`
+    INSERT OR IGNORE INTO volunteer_signups (user_id, project_id, status, apply_reason, skills)
+    VALUES (?, ?, ?, ?, ?)
+  `);
+
+  const volunteerSignups = [
+    { userId: 2, projectId: 4, status: 'approved', apply_reason: '热爱阅读，希望为读者服务', skills: '图书分类、读者服务' },
+    { userId: 3, projectId: 4, status: 'approved', apply_reason: '想体验图书馆工作', skills: '耐心细致' },
+    { userId: 2, projectId: 6, status: 'approved', apply_reason: '疫情防控人人有责', skills: '医学背景' },
+    { userId: 4, projectId: 6, status: 'approved', apply_reason: '贡献自己的力量', skills: '沟通能力强' },
+    { userId: 5, projectId: 1, status: 'pending', apply_reason: '想为环保出一份力', skills: '体力好' },
+    { userId: 3, projectId: 2, status: 'pending', apply_reason: '关爱老人是美德', skills: '耐心、有爱心' }
+  ];
+
+  volunteerSignups.forEach(signup => {
+    insertVolunteerSignup.run(signup.userId, signup.projectId, signup.status, signup.apply_reason, signup.skills);
+  });
+
+  const insertServiceRecord = db.prepare(`
+    INSERT OR IGNORE INTO volunteer_service_records (signup_id, user_id, project_id, service_date, start_time, end_time, actual_hours, task_description, recorded_by, points_awarded, status)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `);
+
+  const serviceRecords = [
+    { signupId: 1, userId: 2, projectId: 4, serviceDate: addDays(now, -5).slice(0, 10), startTime: addDays(now, -5).slice(0, 10) + ' 09:00:00', endTime: addDays(now, -5).slice(0, 10) + ' 17:00:00', actualHours: 6.0, taskDescription: '图书整理、读者引导', recordedBy: 1, pointsAwarded: 24, status: 'confirmed' },
+    { signupId: 1, userId: 2, projectId: 4, serviceDate: addDays(now, -4).slice(0, 10), startTime: addDays(now, -4).slice(0, 10) + ' 09:00:00', endTime: addDays(now, -4).slice(0, 10) + ' 17:00:00', actualHours: 6.0, taskDescription: '阅读推广活动协助', recordedBy: 1, pointsAwarded: 24, status: 'confirmed' },
+    { signupId: 2, userId: 3, projectId: 4, serviceDate: addDays(now, -3).slice(0, 10), startTime: addDays(now, -3).slice(0, 10) + ' 09:00:00', endTime: addDays(now, -3).slice(0, 10) + ' 17:00:00', actualHours: 6.0, taskDescription: '图书分类上架', recordedBy: 1, pointsAwarded: 24, status: 'confirmed' },
+    { signupId: 3, userId: 2, projectId: 6, serviceDate: addDays(now, -10).slice(0, 10), startTime: addDays(now, -10).slice(0, 10) + ' 08:00:00', endTime: addDays(now, -10).slice(0, 10) + ' 16:00:00', actualHours: 8.0, taskDescription: '体温检测、信息登记', recordedBy: 1, pointsAwarded: 56, status: 'confirmed' },
+    { signupId: 3, userId: 2, projectId: 6, serviceDate: addDays(now, -9).slice(0, 10), startTime: addDays(now, -9).slice(0, 10) + ' 08:00:00', endTime: addDays(now, -9).slice(0, 10) + ' 16:00:00', actualHours: 8.0, taskDescription: '防疫宣传、物资配送', recordedBy: 1, pointsAwarded: 56, status: 'confirmed' },
+    { signupId: 4, userId: 4, projectId: 6, serviceDate: addDays(now, -8).slice(0, 10), startTime: addDays(now, -8).slice(0, 10) + ' 08:00:00', endTime: addDays(now, -8).slice(0, 10) + ' 16:00:00', actualHours: 8.0, taskDescription: '社区排查、信息统计', recordedBy: 1, pointsAwarded: 56, status: 'confirmed' }
+  ];
+
+  serviceRecords.forEach(record => {
+    insertServiceRecord.run(record.signupId, record.userId, record.projectId, record.serviceDate, record.startTime, record.endTime, record.actualHours, record.taskDescription, record.recordedBy, record.pointsAwarded, record.status);
+  });
+
+  const insertVolunteerReview = db.prepare(`
+    INSERT OR IGNORE INTO volunteer_reviews (user_id, project_id, rating, content, is_anonymous)
+    VALUES (?, ?, ?, ?, ?)
+  `);
+
+  const volunteerReviews = [
+    { userId: 2, projectId: 4, rating: 5, content: '非常有意义的活动，图书馆的工作人员很热情，学到了很多图书管理知识。', isAnonymous: 0 },
+    { userId: 3, projectId: 4, rating: 4, content: '活动组织得很好，就是时间有点长，希望以后能有更多休息时间。', isAnonymous: 1 },
+    { userId: 2, projectId: 6, rating: 5, content: '疫情防控志愿服务很有意义，虽然辛苦但是很有成就感。', isAnonymous: 0 },
+    { userId: 4, projectId: 6, rating: 5, content: '感谢组织者的安排，能为疫情防控出一份力感到很自豪。', isAnonymous: 0 }
+  ];
+
+  volunteerReviews.forEach(review => {
+    insertVolunteerReview.run(review.userId, review.projectId, review.rating, review.content, review.isAnonymous);
   });
 
   console.log('数据库初始化完成！');

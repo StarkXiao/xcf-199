@@ -182,3 +182,125 @@ export interface PartyReminder {
   branch: string
 }
 
+export interface VolunteerProject {
+  id: number
+  title: string
+  description: string
+  cover_image: string
+  category: string
+  location: string
+  start_time: string
+  end_time: string
+  signup_deadline: string
+  max_participants: number
+  points_per_hour: number
+  service_hours: number
+  organizer: string
+  contact_person: string
+  contact_phone: string
+  status: string
+  views: number
+  signup_count?: number
+  avg_rating?: number
+  review_count?: number
+  is_signed_up?: boolean
+  signup_status?: string
+  signup_id?: number
+  total_service_hours?: number
+  total_points_awarded?: number
+  has_reviewed?: boolean
+  my_review?: VolunteerReview
+  created_at: string
+  updated_at: string
+}
+
+export interface VolunteerSignup {
+  id: number
+  user_id: number
+  project_id: number
+  status: string
+  apply_reason: string
+  skills: string
+  reviewed_by?: number
+  review_opinion?: string
+  reviewed_at?: string
+  signed_up_at: string
+  real_name?: string
+  username?: string
+  phone?: string
+  branch?: string
+  avatar?: string
+  title?: string
+  cover_image?: string
+  category?: string
+  location?: string
+  start_time?: string
+  end_time?: string
+  project_status?: string
+  points_per_hour?: number
+}
+
+export interface VolunteerServiceRecord {
+  id: number
+  signup_id: number
+  user_id: number
+  project_id: number
+  service_date: string
+  start_time: string
+  end_time: string
+  actual_hours: number
+  task_description: string
+  recorded_by?: number
+  points_awarded: number
+  status: string
+  created_at: string
+  real_name?: string
+  username?: string
+  project_title?: string
+  project_category?: string
+}
+
+export interface VolunteerReview {
+  id: number
+  user_id: number
+  project_id: number
+  rating: number
+  content: string
+  is_anonymous: number
+  reply_content?: string
+  reply_by?: number
+  reply_at?: string
+  created_at: string
+  real_name?: string
+  avatar?: string
+}
+
+export interface VolunteerStats {
+  total_projects: number
+  recruiting_projects: number
+  completed_projects: number
+  total_volunteers: number
+  total_service_hours: number
+  total_points_awarded: number
+}
+
+export interface VolunteerMyStats {
+  total_projects: number
+  total_hours: number
+  total_points: number
+}
+
+export interface VolunteerCategoryStats {
+  category: string
+  project_count: number
+}
+
+export interface VolunteerRanking {
+  id: number
+  real_name: string
+  branch: string
+  avatar: string
+  total_hours: number
+  total_points: number
+}
+

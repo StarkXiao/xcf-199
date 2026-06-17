@@ -26,6 +26,10 @@ let dbData = {
   party_development_stages: [],
   party_development_materials: [],
   party_development_history: [],
+  volunteer_projects: [],
+  volunteer_signups: [],
+  volunteer_service_records: [],
+  volunteer_reviews: [],
   counters: {
     users: 0,
     articles: 0,
@@ -37,7 +41,11 @@ let dbData = {
     party_development: 0,
     party_development_stages: 0,
     party_development_materials: 0,
-    party_development_history: 0
+    party_development_history: 0,
+    volunteer_projects: 0,
+    volunteer_signups: 0,
+    volunteer_service_records: 0,
+    volunteer_reviews: 0
   }
 };
 
@@ -251,6 +259,89 @@ async function initMySQL() {
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
     `);
 
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS volunteer_projects (
+        id INTEGER PRIMARY KEY AUTO_INCREMENT,
+        title VARCHAR(500) NOT NULL,
+        description TEXT NOT NULL,
+        cover_image VARCHAR(500),
+        category VARCHAR(100),
+        location VARCHAR(500),
+        start_time DATETIME,
+        end_time DATETIME,
+        signup_deadline DATETIME,
+        max_participants INTEGER,
+        points_per_hour INTEGER DEFAULT 5,
+        service_hours INTEGER DEFAULT 0,
+        organizer VARCHAR(200),
+        contact_person VARCHAR(100),
+        contact_phone VARCHAR(50),
+        status VARCHAR(20) DEFAULT 'recruiting',
+        views INTEGER DEFAULT 0,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    `);
+
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS volunteer_signups (
+        id INTEGER PRIMARY KEY AUTO_INCREMENT,
+        project_id INTEGER NOT NULL,
+        user_id INTEGER NOT NULL,
+        status VARCHAR(20) DEFAULT 'pending',
+        signup_reason TEXT,
+        skills TEXT,
+        service_hours INTEGER DEFAULT 0,
+        points_awarded INTEGER DEFAULT 0,
+        reviewed_by INTEGER,
+        review_opinion TEXT,
+        reviewed_at DATETIME,
+        signed_up_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE KEY unique_signup (project_id, user_id),
+        FOREIGN KEY (project_id) REFERENCES volunteer_projects(id) ON DELETE CASCADE,
+        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+        FOREIGN KEY (reviewed_by) REFERENCES users(id) ON DELETE SET NULL
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    `);
+
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS volunteer_service_records (
+        id INTEGER PRIMARY KEY AUTO_INCREMENT,
+        signup_id INTEGER NOT NULL,
+        project_id INTEGER NOT NULL,
+        user_id INTEGER NOT NULL,
+        service_date DATE,
+        start_time TIME,
+        end_time TIME,
+        actual_hours DECIMAL(5,1) DEFAULT 0,
+        points_awarded INTEGER DEFAULT 0,
+        task_description TEXT,
+        checked_by INTEGER,
+        status VARCHAR(20) DEFAULT 'confirmed',
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (signup_id) REFERENCES volunteer_signups(id) ON DELETE CASCADE,
+        FOREIGN KEY (project_id) REFERENCES volunteer_projects(id) ON DELETE CASCADE,
+        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+        FOREIGN KEY (checked_by) REFERENCES users(id) ON DELETE SET NULL
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    `);
+
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS volunteer_reviews (
+        id INTEGER PRIMARY KEY AUTO_INCREMENT,
+        project_id INTEGER NOT NULL,
+        user_id INTEGER NOT NULL,
+        signup_id INTEGER NOT NULL,
+        rating INTEGER NOT NULL,
+        content TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE KEY unique_review (project_id, user_id),
+        FOREIGN KEY (project_id) REFERENCES volunteer_projects(id) ON DELETE CASCADE,
+        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+        FOREIGN KEY (signup_id) REFERENCES volunteer_signups(id) ON DELETE CASCADE
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    `);
+
     const [users] = await pool.query('SELECT COUNT(*) as count FROM users');
     if (users[0].count === 0) {
       await seedMySQL();
@@ -436,6 +527,124 @@ async function seedMySQL() {
     [now, now]
   );
   await pool.query(`ALTER TABLE study_records AUTO_INCREMENT = 3`);
+
+  const volunteerCovers = [
+    'https://images.unsplash.com/photo-1559027615-cd4628902d4a?w=800',
+    'https://images.unsplash.com/photo-1469571486292-0ba58a3f068b?w=800',
+    'https://images.unsplash.com/photo-1532629345422-7515f3d16bb6?w=800',
+    'https://images.unsplash.com/photo-1488521787991-ed7bbaae773c?w=800',
+    'https://images.unsplash.com/photo-1593113598332-cd288d649433?w=800'
+  ];
+
+  const volunteerProjects = [
+    {
+      id: 1, title: '社区环保志愿服务',
+      description: '参与社区环境清洁、垃圾分类宣传等志愿服务活动，共同建设美丽家园。',
+      cover: volunteerCovers[0], category: '环保公益',
+      location: '朝阳社区活动中心',
+      startDays: 10, endDays: 10, deadlineDays: 5,
+      max: 30, pointsPerHour: 5,
+      organizer: '朝阳社区居委会', contactPerson: '王主任', contactPhone: '13800000001',
+      status: 'recruiting', views: 256
+    },
+    {
+      id: 2, title: '关爱老人志愿活动',
+      description: '走进敬老院，为孤寡老人提供陪伴、生活照料、文艺表演等志愿服务。',
+      cover: volunteerCovers[1], category: '助老扶弱',
+      location: '阳光敬老院',
+      startDays: 5, endDays: 5, deadlineDays: 2,
+      max: 20, pointsPerHour: 6,
+      organizer: '志愿者协会', contactPerson: '李会长', contactPhone: '13800000002',
+      status: 'recruiting', views: 189
+    },
+    {
+      id: 3, title: '疫情防控志愿服务',
+      description: '参与社区疫情防控工作，包括体温检测、信息登记、物资配送等。',
+      cover: volunteerCovers[2], category: '疫情防控',
+      location: '各社区服务点',
+      startDays: -15, endDays: -10, deadlineDays: -18,
+      max: 50, pointsPerHour: 8,
+      organizer: '街道办事处', contactPerson: '张主任', contactPhone: '13800000003',
+      status: 'completed', views: 532
+    },
+    {
+      id: 4, title: '义务支教志愿服务',
+      description: '为乡村学校的孩子们提供义务支教服务，点亮孩子们的求学梦想。',
+      cover: volunteerCovers[3], category: '教育支持',
+      location: '希望小学',
+      startDays: 20, endDays: 27, deadlineDays: 15,
+      max: 15, pointsPerHour: 7,
+      organizer: '教育局志愿队', contactPerson: '赵老师', contactPhone: '13800000004',
+      status: 'recruiting', views: 341
+    },
+    {
+      id: 5, title: '交通文明劝导活动',
+      description: '在主要路口开展交通文明劝导，引导市民遵守交通规则，文明出行。',
+      cover: volunteerCovers[4], category: '文明创建',
+      location: '中心广场路口',
+      startDays: 8, endDays: 9, deadlineDays: 3,
+      max: 25, pointsPerHour: 5,
+      organizer: '文明办', contactPerson: '陈主任', contactPhone: '13800000005',
+      status: 'recruiting', views: 167
+    }
+  ];
+
+  for (const p of volunteerProjects) {
+    const start = addDays(p.startDays);
+    const end = addDays(p.endDays);
+    const deadline = addDays(p.deadlineDays);
+    await pool.query(
+      `INSERT INTO volunteer_projects (id, title, description, cover_image, category, location, start_time, end_time, signup_deadline, max_participants, points_per_hour, service_hours, organizer, contact_person, contact_phone, status, views, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?)`,
+      [p.id, p.title, p.description, p.cover, p.category, p.location, start, end, deadline, p.max, p.pointsPerHour, p.organizer, p.contactPerson, p.contactPhone, p.status, p.views, now, now]
+    );
+  }
+  await pool.query(`ALTER TABLE volunteer_projects AUTO_INCREMENT = 6`);
+
+  const volunteerSignups = [
+    { id: 1, project_id: 3, user_id: 2, status: 'approved', service_hours: 16, points_awarded: 128, signup_reason: '希望能为疫情防控贡献一份力量', skills: '沟通能力强' },
+    { id: 2, project_id: 3, user_id: 3, status: 'approved', service_hours: 12, points_awarded: 96, signup_reason: '党员应该冲在前面', skills: '有医护背景' },
+    { id: 3, project_id: 3, user_id: 4, status: 'approved', service_hours: 20, points_awarded: 160, signup_reason: '愿意为社区服务', skills: '能吃苦耐劳' },
+    { id: 4, project_id: 1, user_id: 2, status: 'pending', service_hours: 0, points_awarded: 0, signup_reason: '想参加环保活动', skills: '' },
+    { id: 5, project_id: 1, user_id: 5, status: 'approved', service_hours: 0, points_awarded: 0, signup_reason: '为社区做贡献', skills: '有组织经验' }
+  ];
+
+  for (const s of volunteerSignups) {
+    await pool.query(
+      `INSERT INTO volunteer_signups (id, project_id, user_id, status, signup_reason, skills, service_hours, points_awarded, reviewed_by, reviewed_at, signed_up_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [s.id, s.project_id, s.user_id, s.status, s.signup_reason, s.skills, s.service_hours, s.points_awarded, s.status === 'approved' ? 1 : null, s.status === 'approved' ? now : null, now]
+    );
+  }
+  await pool.query(`ALTER TABLE volunteer_signups AUTO_INCREMENT = 6`);
+
+  const volunteerServiceRecords = [
+    { id: 1, signup_id: 1, project_id: 3, user_id: 2, service_date: addDays(-14), start_time: '08:00:00', end_time: '16:00:00', actual_hours: 8, points_awarded: 64, task_description: '社区出入口体温检测', checked_by: 1, status: 'confirmed' },
+    { id: 2, signup_id: 1, project_id: 3, user_id: 2, service_date: addDays(-13), start_time: '08:00:00', end_time: '16:00:00', actual_hours: 8, points_awarded: 64, task_description: '物资配送', checked_by: 1, status: 'confirmed' },
+    { id: 3, signup_id: 2, project_id: 3, user_id: 3, service_date: addDays(-14), start_time: '09:00:00', end_time: '15:00:00', actual_hours: 6, points_awarded: 48, task_description: '信息登记', checked_by: 1, status: 'confirmed' },
+    { id: 4, signup_id: 2, project_id: 3, user_id: 3, service_date: addDays(-12), start_time: '09:00:00', end_time: '15:00:00', actual_hours: 6, points_awarded: 48, task_description: '政策宣传', checked_by: 1, status: 'confirmed' },
+    { id: 5, signup_id: 3, project_id: 3, user_id: 4, service_date: addDays(-15), start_time: '08:00:00', end_time: '18:00:00', actual_hours: 10, points_awarded: 80, task_description: '全天值守', checked_by: 1, status: 'confirmed' },
+    { id: 6, signup_id: 3, project_id: 3, user_id: 4, service_date: addDays(-13), start_time: '08:00:00', end_time: '18:00:00', actual_hours: 10, points_awarded: 80, task_description: '物资配送', checked_by: 1, status: 'confirmed' }
+  ];
+
+  for (const r of volunteerServiceRecords) {
+    await pool.query(
+      `INSERT INTO volunteer_service_records (id, signup_id, project_id, user_id, service_date, start_time, end_time, actual_hours, points_awarded, task_description, checked_by, status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [r.id, r.signup_id, r.project_id, r.user_id, r.service_date, r.start_time, r.end_time, r.actual_hours, r.points_awarded, r.task_description, r.checked_by, r.status, now]
+    );
+  }
+  await pool.query(`ALTER TABLE volunteer_service_records AUTO_INCREMENT = 7`);
+
+  const volunteerReviews = [
+    { id: 1, project_id: 3, user_id: 2, signup_id: 1, rating: 5, content: '很有意义的活动，组织得很好，收获很多。' },
+    { id: 2, project_id: 3, user_id: 3, signup_id: 2, rating: 4, content: '活动很充实，希望能多举办这样的活动。' }
+  ];
+
+  for (const r of volunteerReviews) {
+    await pool.query(
+      `INSERT INTO volunteer_reviews (id, project_id, user_id, signup_id, rating, content, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      [r.id, r.project_id, r.user_id, r.signup_id, r.rating, r.content, now]
+    );
+  }
+  await pool.query(`ALTER TABLE volunteer_reviews AUTO_INCREMENT = 3`);
 }
 
 function seedJson() {
@@ -626,6 +835,48 @@ function seedJson() {
     { id: 13, development_id: 3, stage_code: 'probation', action_type: 'start', action_detail: '进入预备期考察阶段（一年）', operator_id: 1, operator_name: '系统管理员', created_at: addDays(-180) }
   ];
   dbData.counters.party_development_history = 13;
+
+  const volunteerCovers = [
+    'https://images.unsplash.com/photo-1559027615-cd4628902d4a?w=800',
+    'https://images.unsplash.com/photo-1469571486292-0ba58a3f068b?w=800',
+    'https://images.unsplash.com/photo-1532629345422-7515f3d16bb6?w=800',
+    'https://images.unsplash.com/photo-1488521787991-ed7bbaae773c?w=800',
+    'https://images.unsplash.com/photo-1593113598332-cd288d649433?w=800'
+  ];
+
+  dbData.volunteer_projects = [
+    { id: 1, title: '社区环保志愿服务', description: '参与社区环境清洁、垃圾分类宣传等志愿服务活动，共同建设美丽家园。', cover_image: volunteerCovers[0], category: '环保公益', location: '朝阳社区活动中心', start_time: addDays(10), end_time: addDays(10), signup_deadline: addDays(5), max_participants: 30, points_per_hour: 5, service_hours: 0, organizer: '朝阳社区居委会', contact_person: '王主任', contact_phone: '13800000001', status: 'recruiting', views: 256, created_at: now, updated_at: now },
+    { id: 2, title: '关爱老人志愿活动', description: '走进敬老院，为孤寡老人提供陪伴、生活照料、文艺表演等志愿服务。', cover_image: volunteerCovers[1], category: '助老扶弱', location: '阳光敬老院', start_time: addDays(5), end_time: addDays(5), signup_deadline: addDays(2), max_participants: 20, points_per_hour: 6, service_hours: 0, organizer: '志愿者协会', contact_person: '李会长', contact_phone: '13800000002', status: 'recruiting', views: 189, created_at: now, updated_at: now },
+    { id: 3, title: '疫情防控志愿服务', description: '参与社区疫情防控工作，包括体温检测、信息登记、物资配送等。', cover_image: volunteerCovers[2], category: '疫情防控', location: '各社区服务点', start_time: addDays(-15), end_time: addDays(-10), signup_deadline: addDays(-18), max_participants: 50, points_per_hour: 8, service_hours: 0, organizer: '街道办事处', contact_person: '张主任', contact_phone: '13800000003', status: 'completed', views: 532, created_at: now, updated_at: now },
+    { id: 4, title: '义务支教志愿服务', description: '为乡村学校的孩子们提供义务支教服务，点亮孩子们的求学梦想。', cover_image: volunteerCovers[3], category: '教育支持', location: '希望小学', start_time: addDays(20), end_time: addDays(27), signup_deadline: addDays(15), max_participants: 15, points_per_hour: 7, service_hours: 0, organizer: '教育局志愿队', contact_person: '赵老师', contact_phone: '13800000004', status: 'recruiting', views: 341, created_at: now, updated_at: now },
+    { id: 5, title: '交通文明劝导活动', description: '在主要路口开展交通文明劝导，引导市民遵守交通规则，文明出行。', cover_image: volunteerCovers[4], category: '文明创建', location: '中心广场路口', start_time: addDays(8), end_time: addDays(9), signup_deadline: addDays(3), max_participants: 25, points_per_hour: 5, service_hours: 0, organizer: '文明办', contact_person: '陈主任', contact_phone: '13800000005', status: 'recruiting', views: 167, created_at: now, updated_at: now }
+  ];
+  dbData.counters.volunteer_projects = 5;
+
+  dbData.volunteer_signups = [
+    { id: 1, project_id: 3, user_id: 2, status: 'approved', signup_reason: '希望能为疫情防控贡献一份力量', skills: '沟通能力强', service_hours: 16, points_awarded: 128, reviewed_by: 1, review_opinion: '同意', reviewed_at: now, signed_up_at: now },
+    { id: 2, project_id: 3, user_id: 3, status: 'approved', signup_reason: '党员应该冲在前面', skills: '有医护背景', service_hours: 12, points_awarded: 96, reviewed_by: 1, review_opinion: '同意', reviewed_at: now, signed_up_at: now },
+    { id: 3, project_id: 3, user_id: 4, status: 'approved', signup_reason: '愿意为社区服务', skills: '能吃苦耐劳', service_hours: 20, points_awarded: 160, reviewed_by: 1, review_opinion: '同意', reviewed_at: now, signed_up_at: now },
+    { id: 4, project_id: 1, user_id: 2, status: 'pending', signup_reason: '想参加环保活动', skills: '', service_hours: 0, points_awarded: 0, reviewed_by: null, review_opinion: null, reviewed_at: null, signed_up_at: now },
+    { id: 5, project_id: 1, user_id: 5, status: 'approved', signup_reason: '为社区做贡献', skills: '有组织经验', service_hours: 0, points_awarded: 0, reviewed_by: 1, review_opinion: '同意', reviewed_at: now, signed_up_at: now }
+  ];
+  dbData.counters.volunteer_signups = 5;
+
+  dbData.volunteer_service_records = [
+    { id: 1, signup_id: 1, project_id: 3, user_id: 2, service_date: addDays(-14).split('T')[0], start_time: '08:00:00', end_time: '16:00:00', actual_hours: 8, points_awarded: 64, task_description: '社区出入口体温检测', checked_by: 1, status: 'confirmed', created_at: now },
+    { id: 2, signup_id: 1, project_id: 3, user_id: 2, service_date: addDays(-13).split('T')[0], start_time: '08:00:00', end_time: '16:00:00', actual_hours: 8, points_awarded: 64, task_description: '物资配送', checked_by: 1, status: 'confirmed', created_at: now },
+    { id: 3, signup_id: 2, project_id: 3, user_id: 3, service_date: addDays(-14).split('T')[0], start_time: '09:00:00', end_time: '15:00:00', actual_hours: 6, points_awarded: 48, task_description: '信息登记', checked_by: 1, status: 'confirmed', created_at: now },
+    { id: 4, signup_id: 2, project_id: 3, user_id: 3, service_date: addDays(-12).split('T')[0], start_time: '09:00:00', end_time: '15:00:00', actual_hours: 6, points_awarded: 48, task_description: '政策宣传', checked_by: 1, status: 'confirmed', created_at: now },
+    { id: 5, signup_id: 3, project_id: 3, user_id: 4, service_date: addDays(-15).split('T')[0], start_time: '08:00:00', end_time: '18:00:00', actual_hours: 10, points_awarded: 80, task_description: '全天值守', checked_by: 1, status: 'confirmed', created_at: now },
+    { id: 6, signup_id: 3, project_id: 3, user_id: 4, service_date: addDays(-13).split('T')[0], start_time: '08:00:00', end_time: '18:00:00', actual_hours: 10, points_awarded: 80, task_description: '物资配送', checked_by: 1, status: 'confirmed', created_at: now }
+  ];
+  dbData.counters.volunteer_service_records = 6;
+
+  dbData.volunteer_reviews = [
+    { id: 1, project_id: 3, user_id: 2, signup_id: 1, rating: 5, content: '很有意义的活动，组织得很好，收获很多。', created_at: now },
+    { id: 2, project_id: 3, user_id: 3, signup_id: 2, rating: 4, content: '活动很充实，希望能多举办这样的活动。', created_at: now }
+  ];
+  dbData.counters.volunteer_reviews = 2;
 
   saveDb();
   console.log('JSON 数据库初始化完成！');

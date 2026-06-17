@@ -510,4 +510,513 @@ router.put('/activity-signups/:id/status', async (req, res) => {
   }
 });
 
+router.get('/volunteer-projects', async (req, res) => {
+  try {
+    const page = parseInt(req.query.page) || 1;
+    const pageSize = parseInt(req.query.page_size) || config.pageSize;
+    const status = req.query.status;
+    const keyword = req.query.keyword;
+
+    const predicate = project => {
+      if (status && project.status !== status) return false;
+      if (keyword) {
+        const kw = keyword.toLowerCase();
+        if (!String(project.title || '').toLowerCase().includes(kw)) return false;
+      }
+      return true;
+    };
+
+    let sql = 'SELECT * FROM volunteer_projects';
+    const params = [];
+    let countSql = 'SELECT COUNT(*) as c FROM volunteer_projects';
+    const countParams = [];
+    let whereConditions = [];
+
+    if (status) {
+      whereConditions.push('status = ?');
+      params.push(status);
+      countParams.push(status);
+    }
+    if (keyword) {
+      whereConditions.push('title LIKE ?');
+      params.push(`%${keyword}%`);
+      countParams.push(`%${keyword}%`);
+    }
+
+    if (whereConditions.length > 0) {
+      const whereStr = ' WHERE ' + whereConditions.join(' AND ');
+      sql += whereStr;
+      countSql += whereStr;
+    }
+
+    const result = await db.paginate('volunteer_projects', {
+      page, page_size: pageSize, predicate,
+      sortBy: 'created_at', sortOrder: 'desc',
+      sql, sqlParams: params, countSql, countParams
+    });
+
+    const list = [];
+    for (const project of result.list) {
+      const signupCount = await db.count(
+        'volunteer_signups',
+        s => s.project_id === project.id && s.status !== 'rejected',
+        'SELECT COUNT(*) as c FROM volunteer_signups WHERE project_id = ? AND status != ?',
+        [project.id, 'rejected']
+      );
+      list.push({ ...project, signup_count: signupCount });
+    }
+
+    res.json({ code: 200, message: '获取成功', data: { list, total: result.total, page, page_size: pageSize } });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ code: 500, message: '服务器内部错误', error: err.message });
+  }
+});
+
+router.post('/volunteer-projects', async (req, res) => {
+  try {
+    const d = req.body;
+    if (!d.title || !d.description) return res.status(400).json({ code: 400, message: '标题和描述不能为空' });
+
+    const project = await db.insert(
+      'volunteer_projects',
+      {
+        title: d.title,
+        description: d.description,
+        cover_image: d.cover_image || '',
+        category: d.category || '',
+        location: d.location || '',
+        start_time: d.start_time || null,
+        end_time: d.end_time || null,
+        signup_deadline: d.signup_deadline || null,
+        max_participants: d.max_participants || null,
+        points_per_hour: d.points_per_hour || 5,
+        service_hours: d.service_hours || 0,
+        organizer: d.organizer || '',
+        contact_person: d.contact_person || '',
+        contact_phone: d.contact_phone || '',
+        status: d.status || 'recruiting',
+        views: 0
+      },
+      `INSERT INTO volunteer_projects (title, description, cover_image, category, location, start_time, end_time, signup_deadline, max_participants, points_per_hour, service_hours, organizer, contact_person, contact_phone, status, views) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)`,
+      [d.title, d.description, d.cover_image || '', d.category || '', d.location || '', d.start_time || null, d.end_time || null, d.signup_deadline || null, d.max_participants || null, d.points_per_hour || 5, d.service_hours || 0, d.organizer || '', d.contact_person || '', d.contact_phone || '', d.status || 'recruiting']
+    );
+
+    res.json({ code: 200, message: '创建成功', data: project });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ code: 500, message: '服务器内部错误', error: err.message });
+  }
+});
+
+router.put('/volunteer-projects/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const project = await db.getById('volunteer_projects', parseInt(id));
+    if (!project) return res.status(404).json({ code: 404, message: '项目不存在' });
+
+    const d = req.body;
+    const updated = await db.update(
+      'volunteer_projects', parseInt(id), {},
+      `UPDATE volunteer_projects SET 
+        title = ?, description = ?, cover_image = ?, category = ?,
+        location = ?, start_time = ?, end_time = ?, signup_deadline = ?,
+        max_participants = ?, points_per_hour = ?, service_hours = ?,
+        organizer = ?, contact_person = ?, contact_phone = ?, status = ?
+      WHERE id = ?`,
+      [
+        d.title || project.title,
+        d.description || project.description,
+        d.cover_image !== undefined ? d.cover_image : project.cover_image,
+        d.category !== undefined ? d.category : project.category,
+        d.location !== undefined ? d.location : project.location,
+        d.start_time || project.start_time,
+        d.end_time || project.end_time,
+        d.signup_deadline || project.signup_deadline,
+        d.max_participants || project.max_participants,
+        d.points_per_hour || project.points_per_hour,
+        d.service_hours !== undefined ? d.service_hours : project.service_hours,
+        d.organizer !== undefined ? d.organizer : project.organizer,
+        d.contact_person !== undefined ? d.contact_person : project.contact_person,
+        d.contact_phone !== undefined ? d.contact_phone : project.contact_phone,
+        d.status || project.status
+      ]
+    );
+
+    res.json({ code: 200, message: '更新成功', data: updated });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ code: 500, message: '服务器内部错误', error: err.message });
+  }
+});
+
+router.delete('/volunteer-projects/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const project = await db.getById('volunteer_projects', parseInt(id));
+    if (!project) return res.status(404).json({ code: 404, message: '项目不存在' });
+    await db.remove('volunteer_projects', parseInt(id));
+    res.json({ code: 200, message: '删除成功' });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ code: 500, message: '服务器内部错误', error: err.message });
+  }
+});
+
+router.get('/volunteer-signups/:projectId', async (req, res) => {
+  try {
+    const { projectId } = req.params;
+    const page = parseInt(req.query.page) || 1;
+    const pageSize = parseInt(req.query.page_size) || config.pageSize;
+    const status = req.query.status;
+    const pid = parseInt(projectId);
+
+    let signups;
+    let total;
+
+    if (db.useMySQL) {
+      let sql = `SELECT s.*, u.real_name, u.username, u.phone, u.branch, u.avatar
+                 FROM volunteer_signups s
+                 INNER JOIN users u ON s.user_id = u.id
+                 WHERE s.project_id = ?`;
+      const params = [pid];
+      let countSql = 'SELECT COUNT(*) as total FROM volunteer_signups WHERE project_id = ?';
+      const countParams = [pid];
+
+      if (status) {
+        sql += ' AND s.status = ?';
+        params.push(status);
+        countSql += ' AND status = ?';
+        countParams.push(status);
+      }
+
+      sql += ' ORDER BY s.signed_up_at DESC LIMIT ?, ?';
+      params.push((page - 1) * pageSize, pageSize);
+
+      signups = await db.exec(sql, params);
+      const [cr] = await db.exec(countSql, countParams);
+      total = cr.total || 0;
+    } else {
+      const signupRecords = await db.findMany('volunteer_signups', s => {
+        if (s.project_id !== pid) return false;
+        if (status && s.status !== status) return false;
+        return true;
+      });
+
+      const list = [];
+      for (const signup of signupRecords) {
+        const u = await db.getById('users', signup.user_id);
+        list.push({
+          ...signup,
+          real_name: u ? u.real_name : '未知',
+          username: u ? u.username : '未知',
+          phone: u ? u.phone : '',
+          branch: u ? u.branch : '',
+          avatar: u ? u.avatar : ''
+        });
+      }
+      list.sort((a, b) => new Date(b.signed_up_at) - new Date(a.signed_up_at));
+      total = list.length;
+      const start = (page - 1) * pageSize;
+      const end = start + pageSize;
+      signups = list.slice(start, end);
+    }
+
+    res.json({ code: 200, message: '获取成功', data: { list: signups, total, page, page_size: pageSize } });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ code: 500, message: '服务器内部错误', error: err.message });
+  }
+});
+
+router.put('/volunteer-signups/:id/status', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { status, review_opinion } = req.body;
+    const signupId = parseInt(id);
+    const adminId = req.user.id;
+    const adminName = req.user.real_name;
+
+    const signup = await db.getById('volunteer_signups', signupId);
+    if (!signup) return res.status(404).json({ code: 404, message: '报名记录不存在' });
+
+    await db.update(
+      'volunteer_signups', signupId, {},
+      'UPDATE volunteer_signups SET status = ?, review_opinion = ?, reviewed_by = ?, reviewed_at = NOW() WHERE id = ?',
+      [status, review_opinion || '', adminId, signupId]
+    );
+
+    res.json({ code: 200, message: '审核成功' });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ code: 500, message: '服务器内部错误', error: err.message });
+  }
+});
+
+router.get('/volunteer-service-records/:projectId', async (req, res) => {
+  try {
+    const { projectId } = req.params;
+    const page = parseInt(req.query.page) || 1;
+    const pageSize = parseInt(req.query.page_size) || config.pageSize;
+    const pid = parseInt(projectId);
+
+    let records;
+    let total;
+
+    if (db.useMySQL) {
+      records = await db.exec(
+        `SELECT r.*, u.real_name, u.username
+         FROM volunteer_service_records r
+         INNER JOIN users u ON r.user_id = u.id
+         WHERE r.project_id = ?
+         ORDER BY r.service_date DESC
+         LIMIT ?, ?`,
+        [pid, (page - 1) * pageSize, pageSize]
+      );
+      const [cr] = await db.exec(
+        'SELECT COUNT(*) as total FROM volunteer_service_records WHERE project_id = ?',
+        [pid]
+      );
+      total = cr.total || 0;
+    } else {
+      const recordList = await db.findMany('volunteer_service_records', r => r.project_id === pid);
+      const list = [];
+      for (const record of recordList) {
+        const u = await db.getById('users', record.user_id);
+        list.push({
+          ...record,
+          real_name: u ? u.real_name : '未知',
+          username: u ? u.username : '未知'
+        });
+      }
+      list.sort((a, b) => new Date(b.service_date) - new Date(a.service_date));
+      total = list.length;
+      const start = (page - 1) * pageSize;
+      const end = start + pageSize;
+      records = list.slice(start, end);
+    }
+
+    res.json({ code: 200, message: '获取成功', data: { list: records, total, page, page_size: pageSize } });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ code: 500, message: '服务器内部错误', error: err.message });
+  }
+});
+
+router.post('/volunteer-service-records', async (req, res) => {
+  try {
+    const d = req.body;
+    const adminId = req.user.id;
+
+    if (!d.signup_id || !d.service_date || !d.start_time || !d.end_time) {
+      return res.status(400).json({ code: 400, message: '请填写必要信息' });
+    }
+
+    const signup = await db.getById('volunteer_signups', parseInt(d.signup_id));
+    if (!signup) return res.status(404).json({ code: 404, message: '报名记录不存在' });
+    if (signup.status !== 'approved') {
+      return res.status(400).json({ code: 400, message: '只有通过审核的报名才能登记服务时长' });
+    }
+
+    const project = await db.getById('volunteer_projects', signup.project_id);
+    if (!project) return res.status(404).json({ code: 404, message: '项目不存在' });
+
+    const start = new Date(d.start_time);
+    const end = new Date(d.end_time);
+    const actualHours = Math.round(((end - start) / (1000 * 60 * 60)) * 10) / 10;
+
+    if (actualHours <= 0) {
+      return res.status(400).json({ code: 400, message: '结束时间必须晚于开始时间' });
+    }
+
+    const pointsPerHour = project.points_per_hour || 5;
+    const pointsAwarded = Math.floor(actualHours * pointsPerHour);
+
+    const record = await db.insert(
+      'volunteer_service_records',
+      {
+        signup_id: signup.id,
+        user_id: signup.user_id,
+        project_id: signup.project_id,
+        service_date: d.service_date,
+        start_time: d.start_time,
+        end_time: d.end_time,
+        actual_hours: actualHours,
+        task_description: d.task_description || '',
+        checked_by: adminId,
+        points_awarded: pointsAwarded,
+        status: 'confirmed'
+      },
+      `INSERT INTO volunteer_service_records (signup_id, user_id, project_id, service_date, start_time, end_time, actual_hours, task_description, checked_by, points_awarded, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'confirmed')`,
+      [signup.id, signup.user_id, signup.project_id, d.service_date, d.start_time, d.end_time, actualHours, d.task_description || '', adminId, pointsAwarded]
+    );
+
+    const user = await db.getById('users', signup.user_id);
+    if (user) {
+      await db.update(
+        'users', signup.user_id, {},
+        'UPDATE users SET points = points + ? WHERE id = ?',
+        [pointsAwarded]
+      );
+    }
+
+    await db.insert(
+      'points_records',
+      { user_id: signup.user_id, points: pointsAwarded, reason: `志愿服务：${project.title}`, type: 'earn' },
+      'INSERT INTO points_records (user_id, points, reason, type) VALUES (?, ?, ?, ?)',
+      [signup.user_id, pointsAwarded, `志愿服务：${project.title}`, 'earn']
+    );
+
+    await db.update(
+      'volunteer_signups',
+      signup.id,
+      {},
+      'UPDATE volunteer_signups SET service_hours = service_hours + ?, points_awarded = points_awarded + ? WHERE id = ?',
+      [actualHours, pointsAwarded]
+    );
+
+    await db.update(
+      'volunteer_projects',
+      signup.project_id,
+      {},
+      'UPDATE volunteer_projects SET service_hours = service_hours + ? WHERE id = ?',
+      [actualHours]
+    );
+
+    res.json({ code: 200, message: '登记成功，积分已发放', data: record });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ code: 500, message: '服务器内部错误', error: err.message });
+  }
+});
+
+router.get('/volunteer-stats/overview', async (req, res) => {
+  try {
+    let totalProjects, recruitingProjects, completedProjects;
+    let totalVolunteers, totalServiceHours, totalPointsAwarded;
+
+    if (db.useMySQL) {
+      const [tp] = await db.exec('SELECT COUNT(*) as c FROM volunteer_projects');
+      const [rp] = await db.exec("SELECT COUNT(*) as c FROM volunteer_projects WHERE status = 'recruiting'");
+      const [cp] = await db.exec("SELECT COUNT(*) as c FROM volunteer_projects WHERE status = 'completed'");
+      const [tv] = await db.exec('SELECT COUNT(DISTINCT user_id) as c FROM volunteer_signups WHERE status = "approved"');
+      const [th] = await db.exec('SELECT COALESCE(SUM(actual_hours), 0) as s FROM volunteer_service_records');
+      const [tpa] = await db.exec('SELECT COALESCE(SUM(points_awarded), 0) as s FROM volunteer_service_records');
+
+      totalProjects = tp.c;
+      recruitingProjects = rp.c;
+      completedProjects = cp.c;
+      totalVolunteers = tv.c;
+      totalServiceHours = th.s;
+      totalPointsAwarded = tpa.s;
+    } else {
+      const projects = await db.getAll('volunteer_projects');
+      totalProjects = projects.length;
+      recruitingProjects = projects.filter(p => p.status === 'recruiting').length;
+      completedProjects = projects.filter(p => p.status === 'completed').length;
+
+      const approvedSignups = await db.findMany('volunteer_signups', s => s.status === 'approved');
+      const volunteerSet = new Set(approvedSignups.map(s => s.user_id));
+      totalVolunteers = volunteerSet.size;
+
+      const records = await db.getAll('volunteer_service_records');
+      totalServiceHours = records.reduce((sum, r) => sum + (r.actual_hours || 0), 0);
+      totalPointsAwarded = records.reduce((sum, r) => sum + (r.points_awarded || 0), 0);
+    }
+
+    res.json({
+      code: 200,
+      message: '获取成功',
+      data: {
+        total_projects: totalProjects,
+        recruiting_projects: recruitingProjects,
+        completed_projects: completedProjects,
+        total_volunteers: totalVolunteers,
+        total_service_hours: totalServiceHours,
+        total_points_awarded: totalPointsAwarded
+      }
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ code: 500, message: '服务器内部错误', error: err.message });
+  }
+});
+
+router.get('/volunteer-stats/by-category', async (req, res) => {
+  try {
+    let stats;
+
+    if (db.useMySQL) {
+      stats = await db.exec(
+        `SELECT category, COUNT(*) as project_count
+         FROM volunteer_projects
+         WHERE category IS NOT NULL AND category != ''
+         GROUP BY category
+         ORDER BY project_count DESC`
+      );
+    } else {
+      const projects = await db.getAll('volunteer_projects');
+      const categoryMap = {};
+      projects.forEach(p => {
+        if (p.category) {
+          if (!categoryMap[p.category]) {
+            categoryMap[p.category] = 0;
+          }
+          categoryMap[p.category]++;
+        }
+      });
+      stats = Object.entries(categoryMap)
+        .map(([category, project_count]) => ({ category, project_count }))
+        .sort((a, b) => b.project_count - a.project_count);
+    }
+
+    res.json({ code: 200, message: '获取成功', data: stats });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ code: 500, message: '服务器内部错误', error: err.message });
+  }
+});
+
+router.get('/volunteer-stats/ranking', async (req, res) => {
+  try {
+    const limit = parseInt(req.query.limit) || 10;
+    let ranking;
+
+    if (db.useMySQL) {
+      ranking = await db.exec(
+        `SELECT u.id, u.real_name, u.branch, u.avatar,
+                COALESCE(SUM(r.actual_hours), 0) as total_hours,
+                COALESCE(SUM(r.points_awarded), 0) as total_points
+         FROM users u
+         LEFT JOIN volunteer_service_records r ON u.id = r.user_id
+         WHERE u.role = 'user'
+         GROUP BY u.id
+         ORDER BY total_hours DESC
+         LIMIT ?`,
+        [limit]
+      );
+    } else {
+      const users = await db.findMany('users', u => u.role === 'user');
+      const allRecords = await db.getAll('volunteer_service_records');
+
+      ranking = users.map(user => {
+        const userRecords = allRecords.filter(r => r.user_id === user.id);
+        return {
+          id: user.id,
+          real_name: user.real_name,
+          branch: user.branch,
+          avatar: user.avatar,
+          total_hours: userRecords.reduce((sum, r) => sum + (r.actual_hours || 0), 0),
+          total_points: userRecords.reduce((sum, r) => sum + (r.points_awarded || 0), 0)
+        };
+      }).sort((a, b) => b.total_hours - a.total_hours).slice(0, limit);
+    }
+
+    res.json({ code: 200, message: '获取成功', data: ranking });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ code: 500, message: '服务器内部错误', error: err.message });
+  }
+});
+
 module.exports = router;

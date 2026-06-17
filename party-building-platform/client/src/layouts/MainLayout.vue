@@ -11,6 +11,7 @@
           <router-link to="/articles" class="nav-link" :class="{ active: $route.name === 'articles' || $route.name === 'article-detail' }">学习专栏</router-link>
           <router-link to="/activities" class="nav-link" :class="{ active: $route.name === 'activities' || $route.name === 'activity-detail' }">活动报名</router-link>
           <router-link to="/points" class="nav-link" :class="{ active: $route.name === 'points' }">积分排行</router-link>
+          <router-link to="/volunteer-service" class="nav-link" :class="{ active: $route.name === 'volunteer-service' || $route.name === 'volunteer-service-detail' }">志愿服务</router-link>
           <router-link to="/notices" class="nav-link" :class="{ active: $route.name === 'notices' || $route.name === 'notice-detail' }">支部通知</router-link>
           <router-link v-if="userStore.isLoggedIn" to="/party-development" class="nav-link" :class="{ active: $route.name === 'party-development' }">党员发展</router-link>
         </nav>
@@ -23,6 +24,9 @@
               <div class="dropdown" v-if="showUserMenu" @click.stop>
                 <router-link to="/profile" class="dropdown-item">
                   <span>👤</span> 个人中心
+                </router-link>
+                <router-link to="/my-volunteer" class="dropdown-item">
+                  <span>🤝</span> 我的志愿服务
                 </router-link>
                 <router-link v-if="userStore.isAdmin" to="/admin" class="dropdown-item">
                   <span>⚙️</span> 管理后台

@@ -30,6 +30,14 @@
           <span class="nav-icon">🎖️</span>
           <span class="nav-text">党员发展</span>
         </router-link>
+        <router-link to="/admin/volunteer-service" class="nav-item" :class="{ active: $route.name === 'admin-volunteer-service' || $route.name === 'admin-volunteer-stats' }">
+          <span class="nav-icon">🤝</span>
+          <span class="nav-text">志愿服务</span>
+        </router-link>
+        <router-link to="/admin/volunteer-stats" class="nav-item" :class="{ active: $route.name === 'admin-volunteer-stats' }">
+          <span class="nav-icon">📊</span>
+          <span class="nav-text">志愿统计</span>
+        </router-link>
       </nav>
       <div class="sidebar-footer">
         <router-link to="/" class="back-link">← 返回前台</router-link>

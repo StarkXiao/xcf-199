@@ -67,6 +67,24 @@ const router = createRouter({
           name: 'party-development',
           component: () => import('@/views/PartyDevelopment.vue'),
           meta: { title: '党员发展', requiresAuth: true }
+        },
+        {
+          path: 'volunteer-service',
+          name: 'volunteer-service',
+          component: () => import('@/views/VolunteerService.vue'),
+          meta: { title: '志愿服务' }
+        },
+        {
+          path: 'volunteer-service/:id',
+          name: 'volunteer-service-detail',
+          component: () => import('@/views/VolunteerServiceDetail.vue'),
+          meta: { title: '志愿服务详情' }
+        },
+        {
+          path: 'my-volunteer',
+          name: 'my-volunteer',
+          component: () => import('@/views/MyVolunteer.vue'),
+          meta: { title: '我的志愿服务', requiresAuth: true }
         }
       ]
     },
@@ -122,6 +140,18 @@ const router = createRouter({
           name: 'admin-party-development',
           component: () => import('@/views/admin/PartyDevelopment.vue'),
           meta: { title: '管理后台 - 党员发展管理' }
+        },
+        {
+          path: 'volunteer-service',
+          name: 'admin-volunteer-service',
+          component: () => import('@/views/admin/VolunteerService.vue'),
+          meta: { title: '管理后台 - 志愿服务管理' }
+        },
+        {
+          path: 'volunteer-stats',
+          name: 'admin-volunteer-stats',
+          component: () => import('@/views/admin/VolunteerStats.vue'),
+          meta: { title: '管理后台 - 志愿服务统计' }
         }
       ]
     },

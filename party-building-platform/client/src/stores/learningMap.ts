@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia'
-import { ref, computed } from 'vue'
+import { ref, computed, watch, watchEffect, toRaw } from 'vue'
 import type {
   LearningTopic,
   LearningLevel,
@@ -13,8 +13,31 @@ import type {
   LearningStageStatus,
   LearningLevelStatus
 } from '@/types'
+import { useUserStore } from './user'
 
-const mockTopics: LearningTopic[] = [
+const STORAGE_PREFIX = 'learning_map_'
+const STORAGE_VERSION = '1.0'
+
+interface PersistedState {
+  version: string
+  userId: number
+  topicsProgress: Record<number, number>
+  levels: Record<number, {
+    status: LearningLevelStatus
+    completed_lessons: number
+  }>
+  lessons: Record<number, {
+    status: LearningStageStatus
+  }>
+  currentTopicId: number | null
+  currentLevelId: number | null
+  currentLessonId: number | null
+  completedStageResults: LearningStageResult[]
+  totalStudyMinutes: number
+  updatedAt: string
+}
+
+const defaultTopics: LearningTopic[] = [
   {
     id: 1,
     name: '党的基础知识',
@@ -23,7 +46,7 @@ const mockTopics: LearningTopic[] = [
     color: '#c81d25',
     total_levels: 3,
     total_lessons: 9,
-    progress: 67,
+    progress: 0,
     sort_order: 1
   },
   {
@@ -34,7 +57,7 @@ const mockTopics: LearningTopic[] = [
     color: '#e63946',
     total_levels: 4,
     total_lessons: 12,
-    progress: 33,
+    progress: 0,
     sort_order: 2
   },
   {
@@ -61,7 +84,7 @@ const mockTopics: LearningTopic[] = [
   }
 ]
 
-const mockLevels: LearningLevel[] = [
+const defaultLevels: LearningLevel[] = [
   {
     id: 101,
     topic_id: 1,
@@ -69,10 +92,10 @@ const mockLevels: LearningLevel[] = [
     description: '了解党的基本概念和基本知识',
     level_number: 1,
     difficulty: 'beginner',
-    status: 'completed',
+    status: 'locked',
     required_points: 0,
     total_lessons: 3,
-    completed_lessons: 3,
+    completed_lessons: 0,
     icon: '🌱'
   },
   {
@@ -82,10 +105,10 @@ const mockLevels: LearningLevel[] = [
     description: '深入理解党的性质、宗旨和纲领',
     level_number: 2,
     difficulty: 'intermediate',
-    status: 'current',
+    status: 'locked',
     required_points: 100,
     total_lessons: 3,
-    completed_lessons: 2,
+    completed_lessons: 0,
     icon: '🌿'
   },
   {
@@ -108,10 +131,10 @@ const mockLevels: LearningLevel[] = [
     description: '学习1921-1949年党的历史',
     level_number: 1,
     difficulty: 'beginner',
-    status: 'completed',
+    status: 'locked',
     required_points: 0,
     total_lessons: 3,
-    completed_lessons: 3,
+    completed_lessons: 0,
     icon: '🔴'
   },
   {
@@ -121,10 +144,10 @@ const mockLevels: LearningLevel[] = [
     description: '学习1949-1978年党的历史',
     level_number: 2,
     difficulty: 'intermediate',
-    status: 'current',
+    status: 'locked',
     required_points: 80,
     total_lessons: 3,
-    completed_lessons: 1,
+    completed_lessons: 0,
     icon: '🟠'
   },
   {
@@ -246,7 +269,7 @@ const mockLevels: LearningLevel[] = [
   }
 ]
 
-const mockLessons: LearningLesson[] = [
+const defaultLessons: LearningLesson[] = [
   {
     id: 1001,
     level_id: 101,
@@ -257,7 +280,7 @@ const mockLessons: LearningLesson[] = [
     duration: 15,
     points_reward: 20,
     sort_order: 1,
-    status: 'completed',
+    status: 'locked',
     article_id: 1
   },
   {
@@ -270,7 +293,7 @@ const mockLessons: LearningLesson[] = [
     duration: 20,
     points_reward: 25,
     sort_order: 2,
-    status: 'completed',
+    status: 'locked',
     article_id: 2
   },
   {
@@ -283,7 +306,7 @@ const mockLessons: LearningLesson[] = [
     duration: 18,
     points_reward: 25,
     sort_order: 3,
-    status: 'completed',
+    status: 'locked',
     article_id: 3
   },
   {
@@ -296,7 +319,7 @@ const mockLessons: LearningLesson[] = [
     duration: 25,
     points_reward: 30,
     sort_order: 1,
-    status: 'completed',
+    status: 'locked',
     article_id: 4
   },
   {
@@ -309,7 +332,7 @@ const mockLessons: LearningLesson[] = [
     duration: 22,
     points_reward: 30,
     sort_order: 2,
-    status: 'completed',
+    status: 'locked',
     article_id: 5
   },
   {
@@ -322,7 +345,7 @@ const mockLessons: LearningLesson[] = [
     duration: 28,
     points_reward: 35,
     sort_order: 3,
-    status: 'in_progress',
+    status: 'locked',
     article_id: 6
   },
   {
@@ -371,7 +394,7 @@ const mockLessons: LearningLesson[] = [
     duration: 18,
     points_reward: 20,
     sort_order: 1,
-    status: 'completed'
+    status: 'locked'
   },
   {
     id: 2002,
@@ -383,7 +406,7 @@ const mockLessons: LearningLesson[] = [
     duration: 20,
     points_reward: 25,
     sort_order: 2,
-    status: 'completed'
+    status: 'locked'
   },
   {
     id: 2003,
@@ -395,7 +418,7 @@ const mockLessons: LearningLesson[] = [
     duration: 22,
     points_reward: 25,
     sort_order: 3,
-    status: 'completed'
+    status: 'locked'
   },
   {
     id: 2004,
@@ -407,7 +430,7 @@ const mockLessons: LearningLesson[] = [
     duration: 25,
     points_reward: 30,
     sort_order: 1,
-    status: 'completed'
+    status: 'locked'
   },
   {
     id: 2005,
@@ -419,7 +442,7 @@ const mockLessons: LearningLesson[] = [
     duration: 28,
     points_reward: 35,
     sort_order: 2,
-    status: 'in_progress'
+    status: 'locked'
   },
   {
     id: 2006,
@@ -435,15 +458,84 @@ const mockLessons: LearningLesson[] = [
   }
 ]
 
+function getStorageKey(userId: number): string {
+  return `${STORAGE_PREFIX}${userId}`
+}
+
+function createDefaultPersistedState(userId: number): PersistedState {
+  return {
+    version: STORAGE_VERSION,
+    userId,
+    topicsProgress: {},
+    levels: {},
+    lessons: {},
+    currentTopicId: null,
+    currentLevelId: null,
+    currentLessonId: null,
+    completedStageResults: [],
+    totalStudyMinutes: 0,
+    updatedAt: new Date().toISOString()
+  }
+}
+
+function loadPersistedState(userId: number): PersistedState | null {
+  try {
+    const key = getStorageKey(userId)
+    const raw = localStorage.getItem(key)
+    if (!raw) return null
+
+    const parsed = JSON.parse(raw) as PersistedState
+
+    if (parsed.version !== STORAGE_VERSION) {
+      console.warn('[LearningMap] Storage version mismatch, resetting')
+      localStorage.removeItem(key)
+      return null
+    }
+    if (parsed.userId !== userId) {
+      console.warn('[LearningMap] User ID mismatch, resetting')
+      localStorage.removeItem(key)
+      return null
+    }
+
+    return parsed
+  } catch (error) {
+    console.error('[LearningMap] Failed to load persisted state:', error)
+    return null
+  }
+}
+
+function savePersistedState(userId: number, state: PersistedState): void {
+  try {
+    const key = getStorageKey(userId)
+    const raw = JSON.stringify(state)
+    localStorage.setItem(key, raw)
+  } catch (error) {
+    console.error('[LearningMap] Failed to save persisted state:', error)
+  }
+}
+
+function clearPersistedState(userId: number): void {
+  try {
+    const key = getStorageKey(userId)
+    localStorage.removeItem(key)
+  } catch (error) {
+    console.error('[LearningMap] Failed to clear persisted state:', error)
+  }
+}
+
 export const useLearningMapStore = defineStore('learningMap', () => {
-  const topics = ref<LearningTopic[]>(mockTopics)
-  const levels = ref<LearningLevel[]>(mockLevels)
-  const lessons = ref<LearningLesson[]>(mockLessons)
+  const userStore = useUserStore()
+
+  const topics = ref<LearningTopic[]>(JSON.parse(JSON.stringify(defaultTopics)))
+  const levels = ref<LearningLevel[]>(JSON.parse(JSON.stringify(defaultLevels)))
+  const lessons = ref<LearningLesson[]>(JSON.parse(JSON.stringify(defaultLessons)))
   const currentTopicId = ref<number | null>(null)
   const currentLevelId = ref<number | null>(null)
   const currentLessonId = ref<number | null>(null)
   const showStageResult = ref(false)
   const stageResult = ref<LearningStageResult | null>(null)
+  const isRestoring = ref(false)
+  const isInitialized = ref(false)
 
   const currentTopic = computed(() => {
     if (!currentTopicId.value) return null
@@ -481,9 +573,10 @@ export const useLearningMapStore = defineStore('learningMap', () => {
     const completedTopics = topics.value.filter(t => t.progress === 100)
     const totalPoints = allLessons.reduce((sum, l) => sum + l.points_reward, 0)
     const earnedPoints = completedLessons.reduce((sum, l) => sum + l.points_reward, 0)
+    const totalStudyMinutes = completedLessons.reduce((sum, l) => sum + l.duration, 0)
 
     return {
-      user_id: 1,
+      user_id: userStore.user?.id || 0,
       total_topics: topics.value.length,
       completed_topics: completedTopics.length,
       total_levels: levels.value.length,
@@ -494,10 +587,128 @@ export const useLearningMapStore = defineStore('learningMap', () => {
       earned_points: earnedPoints,
       current_streak: 5,
       longest_streak: 12,
-      total_study_minutes: 486,
+      total_study_minutes: totalStudyMinutes,
       last_study_date: new Date().toISOString()
     }
   })
+
+  const currentUserId = computed(() => userStore.user?.id || null)
+
+  function initializeStore() {
+    if (!currentUserId.value) {
+      resetToDefaults()
+      isInitialized.value = true
+      return
+    }
+
+    isRestoring.value = true
+    try {
+      const persisted = loadPersistedState(currentUserId.value)
+      if (persisted) {
+        applyPersistedState(persisted)
+      } else {
+        resetToDefaults()
+        updateLockedStatus()
+      }
+    } finally {
+      isRestoring.value = false
+      isInitialized.value = true
+    }
+  }
+
+  function resetToDefaults() {
+    topics.value = JSON.parse(JSON.stringify(defaultTopics))
+    levels.value = JSON.parse(JSON.stringify(defaultLevels))
+    lessons.value = JSON.parse(JSON.stringify(defaultLessons))
+    currentTopicId.value = null
+    currentLevelId.value = null
+    currentLessonId.value = null
+    showStageResult.value = false
+    stageResult.value = null
+  }
+
+  function applyPersistedState(persisted: PersistedState) {
+    topics.value = JSON.parse(JSON.stringify(defaultTopics))
+    levels.value = JSON.parse(JSON.stringify(defaultLevels))
+    lessons.value = JSON.parse(JSON.stringify(defaultLessons))
+
+    topics.value.forEach(topic => {
+      topic.progress = persisted.topicsProgress[topic.id] || 0
+    })
+
+    levels.value.forEach(level => {
+      const saved = persisted.levels[level.id]
+      if (saved) {
+        level.status = saved.status
+        level.completed_lessons = saved.completed_lessons
+      }
+    })
+
+    lessons.value.forEach(lesson => {
+      const saved = persisted.lessons[lesson.id]
+      if (saved) {
+        lesson.status = saved.status
+      }
+    })
+
+    currentTopicId.value = persisted.currentTopicId
+    currentLevelId.value = persisted.currentLevelId
+    currentLessonId.value = persisted.currentLessonId
+
+    updateLockedStatus()
+  }
+
+  function buildPersistedState(): PersistedState {
+    const userId = currentUserId.value
+    if (!userId) {
+      throw new Error('No user logged in')
+    }
+
+    const topicsProgress: Record<number, number> = {}
+    topics.value.forEach(t => { topicsProgress[t.id] = t.progress })
+
+    const levelStates: Record<number, { status: LearningLevelStatus; completed_lessons: number }> = {}
+    levels.value.forEach(l => {
+      levelStates[l.id] = { status: l.status, completed_lessons: l.completed_lessons }
+    })
+
+    const lessonStates: Record<number, { status: LearningStageStatus }> = {}
+    lessons.value.forEach(l => { lessonStates[l.id] = { status: l.status } })
+
+    return {
+      version: STORAGE_VERSION,
+      userId,
+      topicsProgress,
+      levels: levelStates,
+      lessons: lessonStates,
+      currentTopicId: currentTopicId.value,
+      currentLevelId: currentLevelId.value,
+      currentLessonId: currentLessonId.value,
+      completedStageResults: [],
+      totalStudyMinutes: lessons.value.filter(l => l.status === 'completed').reduce((sum, l) => sum + l.duration, 0),
+      updatedAt: new Date().toISOString()
+    }
+  }
+
+  function persistIfNeeded() {
+    if (isRestoring.value || !isInitialized.value) return
+    if (!currentUserId.value) return
+
+    try {
+      const state = buildPersistedState()
+      savePersistedState(currentUserId.value, state)
+    } catch (error) {
+      console.error('[LearningMap] Failed to persist state:', error)
+    }
+  }
+
+  function clearUserLearningData(userId: number) {
+    clearPersistedState(userId)
+    if (currentUserId.value === userId) {
+      resetToDefaults()
+      updateLockedStatus()
+    }
+  }
 
   const difficultyText = (difficulty: LearningDifficulty): string => {
     const map: Record<LearningDifficulty, string> = {
@@ -537,7 +748,7 @@ export const useLearningMapStore = defineStore('learningMap', () => {
   }
 
   const selectTopic = (topicId: number) => {
-    currentTopicId.value = topicId
+    currentTopicId.value = topicId === 0 ? null : topicId
     currentLevelId.value = null
     currentLessonId.value = null
   }
@@ -545,7 +756,7 @@ export const useLearningMapStore = defineStore('learningMap', () => {
   const selectLevel = (levelId: number) => {
     const level = levels.value.find(l => l.id === levelId)
     if (level && level.status !== 'locked') {
-      currentLevelId.value = levelId
+      currentLevelId.value = levelId === 0 ? null : levelId
       currentLessonId.value = null
     }
   }
@@ -664,7 +875,7 @@ export const useLearningMapStore = defineStore('learningMap', () => {
           const level = topicLevels[j]
           if (level.status === 'locked') {
             if (j === 0 || topicLevels[j - 1].status === 'completed') {
-              level.status = j === 0 && topic.progress === 0 ? 'current' : 'current'
+              level.status = 'current'
               const levelLessons = lessons.value.filter(l => l.level_id === level.id)
               levelLessons.forEach(lesson => {
                 if (lesson.status === 'locked') {
@@ -674,7 +885,21 @@ export const useLearningMapStore = defineStore('learningMap', () => {
             }
           }
         }
-      }
+        } else {
+          for (let j = 0; j < topicLevels.length; j++) {
+            const level = topicLevels[j]
+            if (level.status !== 'completed') {
+              level.status = 'locked'
+              level.completed_lessons = 0
+              const levelLessons = lessons.value.filter(l => l.level_id === level.id)
+              levelLessons.forEach(lesson => {
+                if (lesson.status !== 'completed') {
+                  lesson.status = 'locked'
+                }
+              })
+            }
+          }
+        }
     }
   }
 
@@ -747,6 +972,32 @@ export const useLearningMapStore = defineStore('learningMap', () => {
     }
   }
 
+  watch(
+    () => userStore.user,
+    (newUser, oldUser) => {
+      if (newUser && newUser.id !== oldUser?.id) {
+        initializeStore()
+      } else if (!newUser && oldUser) {
+        clearUserLearningData(oldUser.id)
+      }
+    },
+    { immediate: true }
+  )
+
+  watch(
+    [levels, lessons, topics, currentTopicId, currentLevelId, currentLessonId],
+    () => {
+      persistIfNeeded()
+    },
+    { deep: true }
+  )
+
+  watchEffect(() => {
+    if (userStore.token && !isInitialized.value) {
+      initializeStore()
+    }
+  })
+
   return {
     topics,
     levels,
@@ -756,6 +1007,8 @@ export const useLearningMapStore = defineStore('learningMap', () => {
     currentLessonId,
     showStageResult,
     stageResult,
+    isRestoring,
+    isInitialized,
     currentTopic,
     currentLevel,
     currentLesson,
@@ -771,6 +1024,9 @@ export const useLearningMapStore = defineStore('learningMap', () => {
     startLesson,
     completeLesson,
     closeStageResult,
-    getTopicProgress
+    getTopicProgress,
+    initializeStore,
+    clearUserLearningData,
+    persistIfNeeded
   }
 })

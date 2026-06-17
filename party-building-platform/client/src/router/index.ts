@@ -170,6 +170,12 @@ const router = createRouter({
           name: 'admin-branch-meetings',
           component: () => import('@/views/admin/BranchMeetings.vue'),
           meta: { title: '管理后台 - 支部会议管理' }
+        },
+        {
+          path: 'branch-meeting-stats',
+          name: 'admin-branch-meeting-stats',
+          component: () => import('@/views/admin/BranchMeetingStats.vue'),
+          meta: { title: '管理后台 - 支部会议统计分析' }
         }
       ]
     },

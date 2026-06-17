@@ -227,7 +227,7 @@ router.get('/stats', authMiddleware, async (req, res) => {
         message: '获取成功',
         data: {
           total_meetings: totalMeetings,
-          by_type: byType.map(b => ({ ...b, type: MEETING_TYPE_MAP[b.type] || b.type })),
+          by_type: byType.map(b => ({ type: b.type, count: b.count })),
           by_branch: byBranch,
           by_month: byMonth,
           avg_attendance_rate: avgAttendanceRate,
@@ -241,8 +241,8 @@ router.get('/stats', authMiddleware, async (req, res) => {
 
       const typeMap = {};
       meetings.forEach(m => {
-        const typeName = MEETING_TYPE_MAP[m.meeting_type] || m.meeting_type;
-        typeMap[typeName] = (typeMap[typeName] || 0) + 1;
+        const typeKey = m.meeting_type || 'unknown';
+        typeMap[typeKey] = (typeMap[typeKey] || 0) + 1;
       });
       const byType = Object.entries(typeMap).map(([type, count]) => ({ type, count }));
 

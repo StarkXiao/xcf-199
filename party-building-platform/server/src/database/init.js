@@ -89,6 +89,74 @@ function initDatabase() {
       FOREIGN KEY (article_id) REFERENCES articles(id) ON DELETE CASCADE,
       UNIQUE(user_id, article_id)
     );
+
+    CREATE TABLE IF NOT EXISTS party_development (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL UNIQUE,
+      current_stage TEXT DEFAULT 'application',
+      overall_status TEXT DEFAULT 'in_progress',
+      application_date DATETIME,
+      activist_date DATETIME,
+      candidate_date DATETIME,
+      probationary_date DATETIME,
+      probation_start_date DATETIME,
+      probation_end_date DATETIME,
+      formal_date DATETIME,
+      branch_secretary TEXT,
+      introducer1 TEXT,
+      introducer2 TEXT,
+      remarks TEXT,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    );
+
+    CREATE TABLE IF NOT EXISTS party_development_stages (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      development_id INTEGER NOT NULL,
+      stage_code TEXT NOT NULL,
+      stage_name TEXT NOT NULL,
+      status TEXT DEFAULT 'pending',
+      start_date DATETIME,
+      end_date DATETIME,
+      deadline_date DATETIME,
+      description TEXT,
+      reviewer TEXT,
+      review_opinion TEXT,
+      review_date DATETIME,
+      sort_order INTEGER DEFAULT 0,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (development_id) REFERENCES party_development(id) ON DELETE CASCADE
+    );
+
+    CREATE TABLE IF NOT EXISTS party_development_materials (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      development_id INTEGER NOT NULL,
+      stage_code TEXT,
+      material_name TEXT NOT NULL,
+      material_type TEXT,
+      file_url TEXT,
+      file_size INTEGER,
+      uploaded_by INTEGER,
+      description TEXT,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (development_id) REFERENCES party_development(id) ON DELETE CASCADE,
+      FOREIGN KEY (uploaded_by) REFERENCES users(id) ON DELETE SET NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS party_development_history (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      development_id INTEGER NOT NULL,
+      stage_code TEXT,
+      action_type TEXT NOT NULL,
+      action_detail TEXT,
+      operator_id INTEGER,
+      operator_name TEXT,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (development_id) REFERENCES party_development(id) ON DELETE CASCADE,
+      FOREIGN KEY (operator_id) REFERENCES users(id) ON DELETE SET NULL
+    );
   `);
 
   const adminHash = bcrypt.hashSync('admin123', 10);

@@ -22,6 +22,10 @@ let dbData = {
   notices: [],
   points_records: [],
   study_records: [],
+  party_development: [],
+  party_development_stages: [],
+  party_development_materials: [],
+  party_development_history: [],
   counters: {
     users: 0,
     articles: 0,
@@ -29,7 +33,11 @@ let dbData = {
     activity_signups: 0,
     notices: 0,
     points_records: 0,
-    study_records: 0
+    study_records: 0,
+    party_development: 0,
+    party_development_stages: 0,
+    party_development_materials: 0,
+    party_development_history: 0
   }
 };
 
@@ -164,6 +172,82 @@ async function initMySQL() {
         UNIQUE KEY unique_study (user_id, article_id),
         FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
         FOREIGN KEY (article_id) REFERENCES articles(id) ON DELETE CASCADE
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    `);
+
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS party_development (
+        id INTEGER PRIMARY KEY AUTO_INCREMENT,
+        user_id INTEGER NOT NULL UNIQUE,
+        current_stage VARCHAR(50) DEFAULT 'application',
+        overall_status VARCHAR(50) DEFAULT 'in_progress',
+        application_date DATETIME,
+        activist_date DATETIME,
+        candidate_date DATETIME,
+        probationary_date DATETIME,
+        probation_start_date DATETIME,
+        probation_end_date DATETIME,
+        formal_date DATETIME,
+        branch_secretary VARCHAR(100),
+        introducer1 VARCHAR(100),
+        introducer2 VARCHAR(100),
+        remarks TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    `);
+
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS party_development_stages (
+        id INTEGER PRIMARY KEY AUTO_INCREMENT,
+        development_id INTEGER NOT NULL,
+        stage_code VARCHAR(50) NOT NULL,
+        stage_name VARCHAR(100) NOT NULL,
+        status VARCHAR(50) DEFAULT 'pending',
+        start_date DATETIME,
+        end_date DATETIME,
+        deadline_date DATETIME,
+        description TEXT,
+        reviewer VARCHAR(100),
+        review_opinion TEXT,
+        review_date DATETIME,
+        sort_order INTEGER DEFAULT 0,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        FOREIGN KEY (development_id) REFERENCES party_development(id) ON DELETE CASCADE
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    `);
+
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS party_development_materials (
+        id INTEGER PRIMARY KEY AUTO_INCREMENT,
+        development_id INTEGER NOT NULL,
+        stage_code VARCHAR(50),
+        material_name VARCHAR(200) NOT NULL,
+        material_type VARCHAR(50),
+        file_url VARCHAR(500),
+        file_size INTEGER,
+        uploaded_by INTEGER,
+        description TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (development_id) REFERENCES party_development(id) ON DELETE CASCADE,
+        FOREIGN KEY (uploaded_by) REFERENCES users(id) ON DELETE SET NULL
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    `);
+
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS party_development_history (
+        id INTEGER PRIMARY KEY AUTO_INCREMENT,
+        development_id INTEGER NOT NULL,
+        stage_code VARCHAR(50),
+        action_type VARCHAR(50) NOT NULL,
+        action_detail TEXT,
+        operator_id INTEGER,
+        operator_name VARCHAR(100),
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (development_id) REFERENCES party_development(id) ON DELETE CASCADE,
+        FOREIGN KEY (operator_id) REFERENCES users(id) ON DELETE SET NULL
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
     `);
 
@@ -460,6 +544,88 @@ function seedJson() {
     { id: 2, user_id: 2, article_id: 2, read_duration: 90, completed: 1, created_at: now }
   ];
   dbData.counters.study_records = 2;
+
+  dbData.party_development = [
+    {
+      id: 1, user_id: 2, current_stage: 'activist', overall_status: 'in_progress',
+      application_date: addDays(-180), activist_date: addDays(-90),
+      candidate_date: null, probationary_date: null,
+      probation_start_date: null, probation_end_date: null, formal_date: null,
+      branch_secretary: '王书记', introducer1: '李党员', introducer2: '张党员',
+      remarks: '该同志表现积极，思想觉悟较高',
+      created_at: addDays(-180), updated_at: addDays(-90)
+    },
+    {
+      id: 2, user_id: 3, current_stage: 'application', overall_status: 'in_progress',
+      application_date: addDays(-30), activist_date: null,
+      candidate_date: null, probationary_date: null,
+      probation_start_date: null, probation_end_date: null, formal_date: null,
+      branch_secretary: '刘书记', introducer1: null, introducer2: null,
+      remarks: null,
+      created_at: addDays(-30), updated_at: addDays(-30)
+    },
+    {
+      id: 3, user_id: 5, current_stage: 'probation', overall_status: 'in_progress',
+      application_date: addDays(-540), activist_date: addDays(-450),
+      candidate_date: addDays(-270), probationary_date: addDays(-180),
+      probation_start_date: addDays(-180), probation_end_date: addDays(5), formal_date: null,
+      branch_secretary: '陈书记', introducer1: '周党员', introducer2: '吴党员',
+      remarks: '预备期表现良好，按期转正中',
+      created_at: addDays(-540), updated_at: addDays(-180)
+    }
+  ];
+  dbData.counters.party_development = 3;
+
+  dbData.party_development_stages = [
+    { id: 1, development_id: 1, stage_code: 'application', stage_name: '入党申请', status: 'completed', start_date: addDays(-180), end_date: addDays(-150), deadline_date: addDays(-150), description: '提交入党申请书，党支部初审', reviewer: '王书记', review_opinion: '同意确定为入党积极分子', review_date: addDays(-150), sort_order: 1, created_at: addDays(-180), updated_at: addDays(-150) },
+    { id: 2, development_id: 1, stage_code: 'activist', stage_name: '积极分子培养', status: 'in_progress', start_date: addDays(-90), end_date: null, deadline_date: addDays(90), description: '参加党课培训、培养联系人考察', reviewer: null, review_opinion: null, review_date: null, sort_order: 2, created_at: addDays(-90), updated_at: addDays(-90) },
+    { id: 3, development_id: 1, stage_code: 'candidate', stage_name: '发展对象考察', status: 'pending', start_date: null, end_date: null, deadline_date: null, description: '政治审查、确定发展对象', reviewer: null, review_opinion: null, review_date: null, sort_order: 3, created_at: addDays(-180), updated_at: addDays(-180) },
+    { id: 4, development_id: 1, stage_code: 'probationary', stage_name: '预备党员接收', status: 'pending', start_date: null, end_date: null, deadline_date: null, description: '支部大会讨论、上级审批', reviewer: null, review_opinion: null, review_date: null, sort_order: 4, created_at: addDays(-180), updated_at: addDays(-180) },
+    { id: 5, development_id: 1, stage_code: 'probation', stage_name: '预备期管理', status: 'pending', start_date: null, end_date: null, deadline_date: null, description: '预备期一年培养考察', reviewer: null, review_opinion: null, review_date: null, sort_order: 5, created_at: addDays(-180), updated_at: addDays(-180) },
+    { id: 6, development_id: 1, stage_code: 'formal', stage_name: '转正审批', status: 'pending', start_date: null, end_date: null, deadline_date: null, description: '转正申请、支部大会表决', reviewer: null, review_opinion: null, review_date: null, sort_order: 6, created_at: addDays(-180), updated_at: addDays(-180) },
+    { id: 7, development_id: 2, stage_code: 'application', stage_name: '入党申请', status: 'in_progress', start_date: addDays(-30), end_date: null, deadline_date: addDays(30), description: '提交入党申请书，党支部初审', reviewer: null, review_opinion: null, review_date: null, sort_order: 1, created_at: addDays(-30), updated_at: addDays(-30) },
+    { id: 8, development_id: 2, stage_code: 'activist', stage_name: '积极分子培养', status: 'pending', start_date: null, end_date: null, deadline_date: null, description: '参加党课培训、培养联系人考察', reviewer: null, review_opinion: null, review_date: null, sort_order: 2, created_at: addDays(-30), updated_at: addDays(-30) },
+    { id: 9, development_id: 2, stage_code: 'candidate', stage_name: '发展对象考察', status: 'pending', start_date: null, end_date: null, deadline_date: null, description: '政治审查、确定发展对象', reviewer: null, review_opinion: null, review_date: null, sort_order: 3, created_at: addDays(-30), updated_at: addDays(-30) },
+    { id: 10, development_id: 2, stage_code: 'probationary', stage_name: '预备党员接收', status: 'pending', start_date: null, end_date: null, deadline_date: null, description: '支部大会讨论、上级审批', reviewer: null, review_opinion: null, review_date: null, sort_order: 4, created_at: addDays(-30), updated_at: addDays(-30) },
+    { id: 11, development_id: 2, stage_code: 'probation', stage_name: '预备期管理', status: 'pending', start_date: null, end_date: null, deadline_date: null, description: '预备期一年培养考察', reviewer: null, review_opinion: null, review_date: null, sort_order: 5, created_at: addDays(-30), updated_at: addDays(-30) },
+    { id: 12, development_id: 2, stage_code: 'formal', stage_name: '转正审批', status: 'pending', start_date: null, end_date: null, deadline_date: null, description: '转正申请、支部大会表决', reviewer: null, review_opinion: null, review_date: null, sort_order: 6, created_at: addDays(-30), updated_at: addDays(-30) },
+    { id: 13, development_id: 3, stage_code: 'application', stage_name: '入党申请', status: 'completed', start_date: addDays(-540), end_date: addDays(-510), deadline_date: addDays(-510), description: '提交入党申请书，党支部初审', reviewer: '陈书记', review_opinion: '同意确定为入党积极分子', review_date: addDays(-510), sort_order: 1, created_at: addDays(-540), updated_at: addDays(-510) },
+    { id: 14, development_id: 3, stage_code: 'activist', stage_name: '积极分子培养', status: 'completed', start_date: addDays(-450), end_date: addDays(-280), deadline_date: addDays(-280), description: '参加党课培训、培养联系人考察', reviewer: '陈书记', review_opinion: '表现优秀，列为发展对象', review_date: addDays(-275), sort_order: 2, created_at: addDays(-450), updated_at: addDays(-275) },
+    { id: 15, development_id: 3, stage_code: 'candidate', stage_name: '发展对象考察', status: 'completed', start_date: addDays(-270), end_date: addDays(-190), deadline_date: addDays(-190), description: '政治审查、确定发展对象', reviewer: '陈书记', review_opinion: '政审合格，同意接收为预备党员', review_date: addDays(-185), sort_order: 3, created_at: addDays(-270), updated_at: addDays(-185) },
+    { id: 16, development_id: 3, stage_code: 'probationary', stage_name: '预备党员接收', status: 'completed', start_date: addDays(-180), end_date: addDays(-175), deadline_date: addDays(-175), description: '支部大会讨论、上级审批', reviewer: '陈书记', review_opinion: '支部大会一致通过', review_date: addDays(-175), sort_order: 4, created_at: addDays(-180), updated_at: addDays(-175) },
+    { id: 17, development_id: 3, stage_code: 'probation', stage_name: '预备期管理', status: 'in_progress', start_date: addDays(-180), end_date: null, deadline_date: addDays(5), description: '预备期一年培养考察', reviewer: null, review_opinion: null, review_date: null, sort_order: 5, created_at: addDays(-180), updated_at: addDays(-180) },
+    { id: 18, development_id: 3, stage_code: 'formal', stage_name: '转正审批', status: 'pending', start_date: null, end_date: null, deadline_date: null, description: '转正申请、支部大会表决', reviewer: null, review_opinion: null, review_date: null, sort_order: 6, created_at: addDays(-540), updated_at: addDays(-540) }
+  ];
+  dbData.counters.party_development_stages = 18;
+
+  dbData.party_development_materials = [
+    { id: 1, development_id: 1, stage_code: 'application', material_name: '入党申请书.pdf', material_type: 'application', file_url: '/uploads/materials/1/application.pdf', file_size: 204800, uploaded_by: 2, description: '个人入党申请书', created_at: addDays(-180) },
+    { id: 2, development_id: 1, stage_code: 'application', material_name: '思想汇报.docx', material_type: 'thought_report', file_url: '/uploads/materials/1/thought1.docx', file_size: 102400, uploaded_by: 2, description: '第一季度思想汇报', created_at: addDays(-170) },
+    { id: 3, development_id: 1, stage_code: 'activist', material_name: '积极分子培训结业证书.jpg', material_type: 'certificate', file_url: '/uploads/materials/1/certificate.jpg', file_size: 512000, uploaded_by: 1, description: '党课培训结业证明', created_at: addDays(-80) },
+    { id: 4, development_id: 2, stage_code: 'application', material_name: '入党申请书.pdf', material_type: 'application', file_url: '/uploads/materials/2/application.pdf', file_size: 180000, uploaded_by: 3, description: '个人入党申请书', created_at: addDays(-30) },
+    { id: 5, development_id: 3, stage_code: 'application', material_name: '入党申请书.pdf', material_type: 'application', file_url: '/uploads/materials/3/application.pdf', file_size: 195000, uploaded_by: 5, description: '个人入党申请书', created_at: addDays(-540) },
+    { id: 6, development_id: 3, stage_code: 'activist', material_name: '思想汇报合集.pdf', material_type: 'thought_report', file_url: '/uploads/materials/3/thoughts.pdf', file_size: 600000, uploaded_by: 5, description: '积极分子期间思想汇报', created_at: addDays(-300) },
+    { id: 7, development_id: 3, stage_code: 'candidate', material_name: '政治审查材料.pdf', material_type: 'political_review', file_url: '/uploads/materials/3/political.pdf', file_size: 800000, uploaded_by: 1, description: '政治审查报告', created_at: addDays(-250) },
+    { id: 8, development_id: 3, stage_code: 'probationary', material_name: '入党志愿书.pdf', material_type: 'application_form', file_url: '/uploads/materials/3/volunteer.pdf', file_size: 1024000, uploaded_by: 1, description: '填写完整的入党志愿书', created_at: addDays(-180) }
+  ];
+  dbData.counters.party_development_materials = 8;
+
+  dbData.party_development_history = [
+    { id: 1, development_id: 1, stage_code: 'application', action_type: 'submit', action_detail: '提交入党申请书', operator_id: 2, operator_name: '张三', created_at: addDays(-180) },
+    { id: 2, development_id: 1, stage_code: 'application', action_type: 'review', action_detail: '党支部初审通过，确定为入党积极分子', operator_id: 1, operator_name: '系统管理员', created_at: addDays(-150) },
+    { id: 3, development_id: 1, stage_code: 'activist', action_type: 'start', action_detail: '进入积极分子培养阶段', operator_id: 1, operator_name: '系统管理员', created_at: addDays(-90) },
+    { id: 4, development_id: 1, stage_code: 'activist', action_type: 'upload', action_detail: '上传积极分子培训结业证书', operator_id: 1, operator_name: '系统管理员', created_at: addDays(-80) },
+    { id: 5, development_id: 2, stage_code: 'application', action_type: 'submit', action_detail: '提交入党申请书', operator_id: 3, operator_name: '李四', created_at: addDays(-30) },
+    { id: 6, development_id: 3, stage_code: 'application', action_type: 'submit', action_detail: '提交入党申请书', operator_id: 5, operator_name: '赵六', created_at: addDays(-540) },
+    { id: 7, development_id: 3, stage_code: 'application', action_type: 'review', action_detail: '党支部初审通过', operator_id: 1, operator_name: '系统管理员', created_at: addDays(-510) },
+    { id: 8, development_id: 3, stage_code: 'activist', action_type: 'start', action_detail: '进入积极分子培养阶段', operator_id: 1, operator_name: '系统管理员', created_at: addDays(-450) },
+    { id: 9, development_id: 3, stage_code: 'activist', action_type: 'review', action_detail: '积极分子培养考察合格，列为发展对象', operator_id: 1, operator_name: '系统管理员', created_at: addDays(-275) },
+    { id: 10, development_id: 3, stage_code: 'candidate', action_type: 'start', action_detail: '进入发展对象考察阶段', operator_id: 1, operator_name: '系统管理员', created_at: addDays(-270) },
+    { id: 11, development_id: 3, stage_code: 'candidate', action_type: 'review', action_detail: '政治审查合格，同意接收为预备党员', operator_id: 1, operator_name: '系统管理员', created_at: addDays(-185) },
+    { id: 12, development_id: 3, stage_code: 'probationary', action_type: 'start', action_detail: '支部大会通过接收为预备党员', operator_id: 1, operator_name: '系统管理员', created_at: addDays(-180) },
+    { id: 13, development_id: 3, stage_code: 'probation', action_type: 'start', action_detail: '进入预备期考察阶段（一年）', operator_id: 1, operator_name: '系统管理员', created_at: addDays(-180) }
+  ];
+  dbData.counters.party_development_history = 13;
 
   saveDb();
   console.log('JSON 数据库初始化完成！');

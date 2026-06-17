@@ -26,6 +26,10 @@
           <span class="nav-icon">👥</span>
           <span class="nav-text">用户管理</span>
         </router-link>
+        <router-link to="/admin/party-development" class="nav-item" :class="{ active: $route.name === 'admin-party-development' }">
+          <span class="nav-icon">🎖️</span>
+          <span class="nav-text">党员发展</span>
+        </router-link>
       </nav>
       <div class="sidebar-footer">
         <router-link to="/" class="back-link">← 返回前台</router-link>

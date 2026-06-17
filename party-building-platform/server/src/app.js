@@ -10,6 +10,7 @@ const activityRoutes = require('./routes/activities');
 const pointsRoutes = require('./routes/points');
 const noticeRoutes = require('./routes/notices');
 const adminRoutes = require('./routes/admin');
+const partyDevelopmentRoutes = require('./routes/partyDevelopment');
 
 const app = express();
 
@@ -28,6 +29,7 @@ app.use('/api/activities', activityRoutes);
 app.use('/api/points', pointsRoutes);
 app.use('/api/notices', noticeRoutes);
 app.use('/api/admin', adminRoutes);
+app.use('/api/party-development', partyDevelopmentRoutes);
 
 app.use((req, res) => {
   res.status(404).json({ code: 404, message: '接口不存在' });

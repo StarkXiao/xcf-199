@@ -61,6 +61,12 @@ const router = createRouter({
           name: 'profile',
           component: () => import('@/views/Profile.vue'),
           meta: { title: '个人中心', requiresAuth: true }
+        },
+        {
+          path: 'party-development',
+          name: 'party-development',
+          component: () => import('@/views/PartyDevelopment.vue'),
+          meta: { title: '党员发展', requiresAuth: true }
         }
       ]
     },
@@ -110,6 +116,12 @@ const router = createRouter({
           name: 'admin-users',
           component: () => import('@/views/admin/Users.vue'),
           meta: { title: '管理后台 - 用户管理' }
+        },
+        {
+          path: 'party-development',
+          name: 'admin-party-development',
+          component: () => import('@/views/admin/PartyDevelopment.vue'),
+          meta: { title: '管理后台 - 党员发展管理' }
         }
       ]
     },

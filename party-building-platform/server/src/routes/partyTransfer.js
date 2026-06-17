@@ -383,16 +383,47 @@ router.put('/materials/:id/verify', authMiddleware, adminMiddleware, async (req,
 
 router.get('/admin/list', authMiddleware, adminMiddleware, async (req, res) => {
   try {
-    const { page = 1, page_size = 10, keyword = '', stage = '', status = '' } = req.query;
+    const { page = 1, page_size = 10, keyword = '', stage = '', status = '', type = '' } = req.query;
+
+    const whereClauses = [];
+    const sqlParams = [];
+
+    if (stage) {
+      whereClauses.push('pt.current_stage = ?');
+      sqlParams.push(stage);
+    }
+    if (status) {
+      whereClauses.push('pt.overall_status = ?');
+      sqlParams.push(status);
+    }
+    if (type) {
+      whereClauses.push('pt.transfer_type = ?');
+      sqlParams.push(type);
+    }
+    if (keyword) {
+      whereClauses.push('(u.real_name LIKE ? OR u.branch LIKE ? OR pt.from_branch LIKE ? OR pt.to_branch LIKE ? OR pt.reason LIKE ?)');
+      const kw = `%${keyword}%`;
+      sqlParams.push(kw, kw, kw, kw, kw);
+    }
+
+    const whereSql = whereClauses.length > 0 ? ` AND ${whereClauses.join(' AND ')}` : '';
 
     const predicate = (d) => {
       let match = true;
       if (stage) match = match && d.current_stage === stage;
       if (status) match = match && d.overall_status === status;
+      if (type) match = match && d.transfer_type === type;
+      if (keyword) {
+        const kw = String(keyword).toLowerCase();
+        const haystacks = [
+          d.real_name, d.user_branch, d.from_branch, d.to_branch, d.reason
+        ].map(v => String(v || '').toLowerCase());
+        match = match && haystacks.some(s => s.includes(kw));
+      }
       return match;
     };
 
-    const sqlBase = 'FROM party_transfers pt LEFT JOIN users u ON pt.user_id = u.id WHERE 1=1';
+    const sqlBase = `FROM party_transfers pt LEFT JOIN users u ON pt.user_id = u.id WHERE 1=1${whereSql}`;
     const countSql = `SELECT COUNT(*) as c ${sqlBase}`;
     const sql = `SELECT pt.*, u.real_name, u.branch as user_branch, u.phone ${sqlBase}`;
 
@@ -405,7 +436,9 @@ router.get('/admin/list', authMiddleware, adminMiddleware, async (req, res) => {
       sortBy: 'created_at',
       sortOrder: 'desc',
       sql: listSql,
-      countSql
+      sqlParams,
+      countSql,
+      countParams: sqlParams
     });
 
     res.json({ code: 200, message: '获取成功', data: result });
@@ -462,6 +495,24 @@ router.put('/admin/:id/stage/:stageCode', authMiddleware, adminMiddleware, async
 
     if (!stage) {
       return res.status(404).json({ code: 404, message: '阶段不存在' });
+    }
+
+    if (action === 'approve' && stageCode === 'material_check') {
+      const requiredMaterials = await db.findMany(
+        'party_transfer_materials',
+        m => m.transfer_id === parseInt(id) && m.is_required === 1,
+        'SELECT * FROM party_transfer_materials WHERE transfer_id = ? AND is_required = 1',
+        [id]
+      );
+      const allPassed = requiredMaterials.length > 0 && requiredMaterials.every(m => m.verify_status === 'passed');
+      const missingUploads = requiredMaterials.filter(m => !m.file_url).length;
+      const pendingCount = requiredMaterials.filter(m => m.file_url && m.verify_status !== 'passed').length;
+      if (!allPassed) {
+        let msg = '材料校验未完成，无法通过此阶段。';
+        if (missingUploads > 0) msg += ` 尚有 ${missingUploads} 份必需材料未上传。`;
+        if (pendingCount > 0) msg += ` 尚有 ${pendingCount} 份必需材料待校验。`;
+        return res.status(400).json({ code: 400, message: msg });
+      }
     }
 
     const user = await db.getById('users', req.user.id);

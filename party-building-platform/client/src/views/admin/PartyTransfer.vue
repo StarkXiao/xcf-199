@@ -411,6 +411,51 @@
               <span class="info-value highlight">{{ getStageName(currentReviewStage) }}</span>
             </div>
           </div>
+
+          <div v-if="currentReviewStage === 'material_check'" class="material-check-panel">
+            <h5 class="panel-title">
+              <span class="panel-icon">📋</span>
+              必需材料校验状态检查
+            </h5>
+            <div class="panel-tip" :class="materialCheckAllPassed ? 'tip-success' : 'tip-warning'">
+              <span v-if="materialCheckAllPassed">✅ 所有必需材料已完成校验并通过，可以审批。</span>
+              <span v-else>⚠️ 存在未完成校验的必需材料，审批通过将被拒绝。</span>
+            </div>
+            <table class="mini-material-table">
+              <thead>
+                <tr>
+                  <th>材料名称</th>
+                  <th>必需</th>
+                  <th>状态</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="m in materialCheckItems" :key="m.id" :class="{ row_alert: m.is_required && m.verify_status !== 'passed' }">
+                  <td>
+                    <span class="file-icon">{{ getFileIcon(m.material_name, m.material_type) }}</span>
+                    {{ m.material_name }}
+                    <span v-if="!m.file_url" class="upload-tag missing">未上传</span>
+                    <span v-else class="upload-tag ok">已上传</span>
+                  </td>
+                  <td>
+                    <span v-if="m.is_required" class="required-badge">必需</span>
+                    <span v-else class="optional-badge">可选</span>
+                  </td>
+                  <td>
+                    <span class="verify-tag" :class="m.verify_status">
+                      {{ getVerifyStatusText(m.verify_status) }}
+                    </span>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+            <div class="panel-summary">
+              <span class="sum-item"><b>{{ materialCheckStats.requiredCount }}</b> 份必需</span>
+              <span class="sum-item ok"><b>{{ materialCheckStats.passedCount }}</b> 通过</span>
+              <span class="sum-item warn" v-if="materialCheckStats.pendingCount > 0"><b>{{ materialCheckStats.pendingCount }}</b> 待校验</span>
+              <span class="sum-item missing" v-if="materialCheckStats.missingCount > 0"><b>{{ materialCheckStats.missingCount }}</b> 未上传</span>
+            </div>
+          </div>
           <div class="form-group">
             <label>审批操作 *</label>
             <div class="action-radio-group">
@@ -612,9 +657,36 @@ const stageMaterials = computed(() => {
   return detailData.value.materials.filter(m => m.stage_code === 'material_check')
 })
 
+const materialCheckItems = computed<PartyTransferMaterial[]>(() => {
+  const source = (reviewItem.value && reviewItem.value.id === detailData.value?.id)
+    ? detailData.value?.materials
+    : detailData.value?.materials
+  return (source || []).filter((m: PartyTransferMaterial) => m.stage_code === 'material_check')
+})
+
+const materialCheckStats = computed(() => {
+  const items = materialCheckItems.value
+  const required = items.filter(m => m.is_required)
+  const passed = required.filter(m => m.file_url && m.verify_status === 'passed').length
+  const pending = required.filter(m => m.file_url && m.verify_status !== 'passed').length
+  const missing = required.filter(m => !m.file_url).length
+  return {
+    requiredCount: required.length,
+    passedCount: passed,
+    pendingCount: pending,
+    missingCount: missing
+  }
+})
+
+const materialCheckAllPassed = computed(() => {
+  const s = materialCheckStats.value
+  return s.requiredCount > 0 && s.passedCount === s.requiredCount
+})
+
 const isReviewValid = computed(() => {
   if (!reviewForm.action) return false
   if (reviewForm.action === 'reject' && !reviewForm.opinion.trim()) return false
+  if (currentReviewStage.value === 'material_check' && reviewForm.action === 'approve' && !materialCheckAllPassed.value) return false
   return true
 })
 
@@ -747,7 +819,8 @@ const loadList = async () => {
       page_size: pageSize,
       keyword: filters.keyword,
       stage: filters.stage,
-      status: filters.status
+      status: filters.status,
+      type: filters.type
     })
     list.value = res.data.items || res.data.list || res.data || []
     total.value = res.data.total || 0
@@ -791,11 +864,19 @@ const closeDetail = () => {
   detailData.value = null
 }
 
-const openReviewModal = (item: PartyTransfer) => {
+const openReviewModal = async (item: PartyTransfer) => {
   reviewItem.value = item
   currentReviewStage.value = item.current_stage
   reviewForm.action = 'approve'
   reviewForm.opinion = ''
+  if (item.current_stage === 'material_check' && detailData.value?.id !== item.id) {
+    try {
+      const res = await getAdminTransferDetail(item.id)
+      detailData.value = res.data
+    } catch (e) {
+      console.error('获取材料信息失败', e)
+    }
+  }
   showReviewModal.value = true
 }
 
@@ -1643,6 +1724,131 @@ onMounted(() => {
   color: var(--text-primary);
   font-weight: 500;
 }
+
+.material-check-panel {
+  background: linear-gradient(135deg, #fffbe6 0%, #fff7e6 100%);
+  border: 1px solid #ffe58f;
+  border-radius: var(--radius-md);
+  padding: 16px;
+  margin-bottom: 20px;
+}
+
+.panel-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: #d48806;
+  margin: 0 0 10px 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.panel-icon {
+  font-size: 16px;
+}
+
+.panel-tip {
+  padding: 8px 12px;
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+  font-weight: 500;
+  margin-bottom: 12px;
+  line-height: 1.6;
+}
+
+.panel-tip.tip-success {
+  background: #f6ffed;
+  color: #389e0d;
+  border: 1px solid #b7eb8f;
+}
+
+.panel-tip.tip-warning {
+  background: #fff2e8;
+  color: #d46b08;
+  border: 1px solid #ffbb96;
+}
+
+.mini-material-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+  background: white;
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  margin-bottom: 10px;
+}
+
+.mini-material-table th,
+.mini-material-table td {
+  padding: 7px 10px;
+  text-align: left;
+  border-bottom: 1px solid #f0f0f0;
+}
+
+.mini-material-table th {
+  background: #fafafa;
+  font-weight: 600;
+  color: var(--text-secondary);
+  font-size: 11px;
+}
+
+.mini-material-table tr:last-child td {
+  border-bottom: none;
+}
+
+.mini-material-table tr.row_alert {
+  background: #fff7e6;
+}
+
+.file-icon {
+  margin-right: 5px;
+  font-size: 14px;
+}
+
+.upload-tag {
+  display: inline-block;
+  padding: 1px 7px;
+  border-radius: 8px;
+  font-size: 10px;
+  font-weight: 500;
+  margin-left: 6px;
+}
+
+.upload-tag.ok {
+  background: #f6ffed;
+  color: #52c41a;
+}
+
+.upload-tag.missing {
+  background: #fff2f0;
+  color: #ff4d4f;
+}
+
+.panel-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding-top: 10px;
+  border-top: 1px dashed #ffe58f;
+}
+
+.sum-item {
+  font-size: 12px;
+  color: var(--text-secondary);
+  padding: 4px 10px;
+  background: white;
+  border-radius: 12px;
+}
+
+.sum-item b {
+  color: var(--text-primary);
+  font-size: 14px;
+  margin: 0 2px;
+}
+
+.sum-item.ok b { color: #52c41a; }
+.sum-item.warn b { color: #fa8c16; }
+.sum-item.missing b { color: #ff4d4f; }
 
 .form-group {
   margin-bottom: 18px;

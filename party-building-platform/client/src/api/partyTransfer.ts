@@ -36,6 +36,7 @@ export interface ListQueryParams {
   keyword?: string
   stage?: string
   status?: string
+  type?: string
 }
 
 export const getMyTransfers = () => {

@@ -618,6 +618,90 @@ export interface PartyTransfer {
   phone?: string
 }
 
+export type DemocraticReviewStatus = 'draft' | 'published' | 'in_progress' | 'completed' | 'archived'
+
+export type DemocraticReviewFormItemType = 'score' | 'text' | 'choice'
+
+export interface DemocraticReviewFormItem {
+  id: number
+  review_id: number
+  item_name: string
+  item_type: DemocraticReviewFormItemType
+  max_score: number
+  options: string
+  sort_order: number
+  weight: number
+  required: number
+  created_at: string
+}
+
+export interface DemocraticReview {
+  id: number
+  title: string
+  year: number
+  branch: string
+  description: string
+  status: DemocraticReviewStatus
+  start_date: string
+  end_date: string
+  form_items?: DemocraticReviewFormItem[]
+  participant_count?: number
+  completed_count?: number
+  avg_score?: number
+  created_by: number
+  created_at: string
+  updated_at: string
+  creator_name?: string
+}
+
+export interface DemocraticReviewScore {
+  id: number
+  review_id: number
+  reviewer_id: number
+  target_user_id: number
+  review_type: 'mutual' | 'organization'
+  form_item_id: number
+  score: number
+  content: string
+  created_at: string
+  item_name?: string
+  item_type?: string
+  max_score?: number
+}
+
+export interface DemocraticReviewResult {
+  user_id: number
+  real_name: string
+  branch: string
+  avatar: string
+  mutual_avg_score: number
+  organization_score: number
+  total_score: number
+  rank: number
+  review_count: number
+}
+
+export interface DemocraticReviewHistory {
+  id: number
+  review_id: number
+  action_type: string
+  action_detail: string
+  operator_id?: number
+  operator_name?: string
+  created_at: string
+}
+
+export interface DemocraticReviewStats {
+  total_reviews: number
+  in_progress_reviews: number
+  completed_reviews: number
+  archived_reviews: number
+  total_participants: number
+  avg_score: number
+  by_year: { year: number; count: number }[]
+  by_branch: { branch: string; count: number }[]
+}
+
 export interface PartyTransferStats {
   total: number
   pending: number

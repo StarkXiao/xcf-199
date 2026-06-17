@@ -1019,4 +1019,420 @@ router.get('/volunteer-stats/ranking', async (req, res) => {
   }
 });
 
+router.get('/democratic-reviews', async (req, res) => {
+  try {
+    const page = parseInt(req.query.page) || 1;
+    const pageSize = parseInt(req.query.page_size) || config.pageSize;
+    const status = req.query.status;
+    const year = req.query.year;
+    const branch = req.query.branch;
+    const keyword = req.query.keyword;
+
+    const predicate = item => {
+      if (status && item.status !== status) return false;
+      if (year && item.year !== parseInt(year)) return false;
+      if (branch && item.branch !== branch) return false;
+      if (keyword) {
+        const kw = keyword.toLowerCase();
+        if (!String(item.title || '').toLowerCase().includes(kw)) return false;
+      }
+      return true;
+    };
+
+    let sql = 'SELECT * FROM democratic_reviews';
+    const params = [];
+    let countSql = 'SELECT COUNT(*) as c FROM democratic_reviews';
+    const countParams = [];
+    let whereConditions = [];
+
+    if (status) {
+      whereConditions.push('status = ?');
+      params.push(status);
+      countParams.push(status);
+    }
+    if (year) {
+      whereConditions.push('year = ?');
+      params.push(parseInt(year));
+      countParams.push(parseInt(year));
+    }
+    if (branch) {
+      whereConditions.push('branch = ?');
+      params.push(branch);
+      countParams.push(branch);
+    }
+    if (keyword) {
+      whereConditions.push('title LIKE ?');
+      params.push(`%${keyword}%`);
+      countParams.push(`%${keyword}%`);
+    }
+
+    if (whereConditions.length > 0) {
+      const whereStr = ' WHERE ' + whereConditions.join(' AND ');
+      sql += whereStr;
+      countSql += whereStr;
+    }
+
+    const result = await db.paginate('democratic_reviews', {
+      page,
+      page_size: pageSize,
+      predicate,
+      sortBy: 'created_at',
+      sortOrder: 'desc',
+      sql,
+      sqlParams: params,
+      countSql,
+      countParams
+    });
+
+    const list = [];
+    for (const review of result.list) {
+      const creator = await db.getById('users', review.created_by);
+      const formItems = db.useMySQL
+        ? await db.exec('SELECT * FROM democratic_review_form_items WHERE review_id = ? ORDER BY sort_order', [review.id])
+        : (await db.findMany('democratic_review_form_items', fi => fi.review_id === review.id)).sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
+
+      let participantCount = 0;
+      if (db.useMySQL) {
+        const [pc] = await db.exec('SELECT COUNT(DISTINCT reviewer_id) as c FROM democratic_review_scores WHERE review_id = ?', [review.id]);
+        participantCount = pc.c || 0;
+      } else {
+        const scores = await db.findMany('democratic_review_scores', s => s.review_id === review.id);
+        participantCount = new Set(scores.map(s => s.reviewer_id)).size;
+      }
+
+      list.push({
+        ...review,
+        creator_name: creator ? creator.real_name : '未知',
+        form_items: formItems,
+        participant_count: participantCount
+      });
+    }
+
+    res.json({ code: 200, message: '获取成功', data: { list, total: result.total, page, page_size: pageSize } });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ code: 500, message: '服务器内部错误', error: err.message });
+  }
+});
+
+router.post('/democratic-reviews', async (req, res) => {
+  try {
+    const d = req.body;
+    if (!d.title || !d.year || !d.branch) {
+      return res.status(400).json({ code: 400, message: '标题、年份和支部不能为空' });
+    }
+
+    const review = await db.insert(
+      'democratic_reviews',
+      {
+        title: d.title,
+        year: d.year,
+        branch: d.branch,
+        description: d.description || '',
+        status: d.status || 'draft',
+        start_date: d.start_date || null,
+        end_date: d.end_date || null,
+        created_by: req.user.id
+      },
+      'INSERT INTO democratic_reviews (title, year, branch, description, status, start_date, end_date, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+      [d.title, d.year, d.branch, d.description || '', d.status || 'draft', d.start_date || null, d.end_date || null, req.user.id]
+    );
+
+    if (d.form_items && Array.isArray(d.form_items)) {
+      for (let i = 0; i < d.form_items.length; i++) {
+        const item = d.form_items[i];
+        await db.insert(
+          'democratic_review_form_items',
+          {
+            review_id: review.id,
+            item_name: item.item_name,
+            item_type: item.item_type || 'score',
+            max_score: item.max_score || 10,
+            options: item.options || '',
+            sort_order: i + 1,
+            weight: item.weight || 1.0,
+            required: item.required !== undefined ? item.required : 1
+          },
+          'INSERT INTO democratic_review_form_items (review_id, item_name, item_type, max_score, options, sort_order, weight, required) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+          [review.id, item.item_name, item.item_type || 'score', item.max_score || 10, item.options || '', i + 1, item.weight || 1.0, item.required !== undefined ? item.required : 1]
+        );
+      }
+    }
+
+    await db.insert(
+      'democratic_review_history',
+      {
+        review_id: review.id,
+        action_type: 'create',
+        action_detail: '创建民主评议',
+        operator_id: req.user.id,
+        operator_name: req.user.real_name
+      },
+      'INSERT INTO democratic_review_history (review_id, action_type, action_detail, operator_id, operator_name) VALUES (?, ?, ?, ?, ?)',
+      [review.id, 'create', '创建民主评议', req.user.id, req.user.real_name]
+    );
+
+    res.json({ code: 200, message: '创建成功', data: review });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ code: 500, message: '服务器内部错误', error: err.message });
+  }
+});
+
+router.put('/democratic-reviews/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const reviewId = parseInt(id);
+    const review = await db.getById('democratic_reviews', reviewId);
+    if (!review) return res.status(404).json({ code: 404, message: '评议不存在' });
+
+    const d = req.body;
+
+    if (d.status === 'published' && review.status === 'draft') {
+      if (!d.start_date && !review.start_date) {
+        return res.status(400).json({ code: 400, message: '发布评议需设置开始时间' });
+      }
+    }
+
+    await db.update(
+      'democratic_reviews',
+      reviewId,
+      {},
+      'UPDATE democratic_reviews SET title = ?, year = ?, branch = ?, description = ?, status = ?, start_date = ?, end_date = ? WHERE id = ?',
+      [
+        d.title || review.title,
+        d.year || review.year,
+        d.branch || review.branch,
+        d.description !== undefined ? d.description : review.description,
+        d.status || review.status,
+        d.start_date || review.start_date,
+        d.end_date || review.end_date,
+        reviewId
+      ]
+    );
+
+    if (d.form_items && Array.isArray(d.form_items)) {
+      if (db.useMySQL) {
+        await db.exec('DELETE FROM democratic_review_form_items WHERE review_id = ?', [reviewId]);
+      } else {
+        const existingItems = await db.findMany('democratic_review_form_items', fi => fi.review_id === reviewId);
+        for (const item of existingItems) {
+          await db.remove('democratic_review_form_items', item.id);
+        }
+      }
+
+      for (let i = 0; i < d.form_items.length; i++) {
+        const item = d.form_items[i];
+        await db.insert(
+          'democratic_review_form_items',
+          {
+            review_id: reviewId,
+            item_name: item.item_name,
+            item_type: item.item_type || 'score',
+            max_score: item.max_score || 10,
+            options: item.options || '',
+            sort_order: i + 1,
+            weight: item.weight || 1.0,
+            required: item.required !== undefined ? item.required : 1
+          },
+          'INSERT INTO democratic_review_form_items (review_id, item_name, item_type, max_score, options, sort_order, weight, required) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+          [reviewId, item.item_name, item.item_type || 'score', item.max_score || 10, item.options || '', i + 1, item.weight || 1.0, item.required !== undefined ? item.required : 1]
+        );
+      }
+    }
+
+    if (d.status && d.status !== review.status) {
+      const statusMessages = {
+        published: '发布评议',
+        in_progress: '开始评议',
+        completed: '完成评议',
+        archived: '归档评议'
+      };
+      await db.insert(
+        'democratic_review_history',
+        {
+          review_id: reviewId,
+          action_type: d.status,
+          action_detail: statusMessages[d.status] || `状态变更为${d.status}`,
+          operator_id: req.user.id,
+          operator_name: req.user.real_name
+        },
+        'INSERT INTO democratic_review_history (review_id, action_type, action_detail, operator_id, operator_name) VALUES (?, ?, ?, ?, ?)',
+        [reviewId, d.status, statusMessages[d.status] || `状态变更为${d.status}`, req.user.id, req.user.real_name]
+      );
+    }
+
+    res.json({ code: 200, message: '更新成功' });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ code: 500, message: '服务器内部错误', error: err.message });
+  }
+});
+
+router.delete('/democratic-reviews/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const review = await db.getById('democratic_reviews', parseInt(id));
+    if (!review) return res.status(404).json({ code: 404, message: '评议不存在' });
+    await db.remove('democratic_reviews', parseInt(id));
+    res.json({ code: 200, message: '删除成功' });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ code: 500, message: '服务器内部错误', error: err.message });
+  }
+});
+
+router.get('/democratic-review-stats/overview', async (req, res) => {
+  try {
+    let totalReviews, inProgressReviews, completedReviews, archivedReviews;
+    let totalParticipants, avgScore;
+
+    if (db.useMySQL) {
+      const [tr] = await db.exec('SELECT COUNT(*) as c FROM democratic_reviews');
+      const [ip] = await db.exec("SELECT COUNT(*) as c FROM democratic_reviews WHERE status = 'in_progress'");
+      const [cr] = await db.exec("SELECT COUNT(*) as c FROM democratic_reviews WHERE status = 'completed'");
+      const [ar] = await db.exec("SELECT COUNT(*) as c FROM democratic_reviews WHERE status = 'archived'");
+      const [tp] = await db.exec('SELECT COUNT(DISTINCT reviewer_id) as c FROM democratic_review_scores');
+      const [as] = await db.exec('SELECT AVG(score) as avg FROM democratic_review_scores WHERE review_type = ?', ['mutual']);
+      totalReviews = tr.c;
+      inProgressReviews = ip.c;
+      completedReviews = cr.c;
+      archivedReviews = ar.c;
+      totalParticipants = tp.c;
+      avgScore = as.avg || 0;
+    } else {
+      const reviews = await db.getAll('democratic_reviews');
+      totalReviews = reviews.length;
+      inProgressReviews = reviews.filter(r => r.status === 'in_progress').length;
+      completedReviews = reviews.filter(r => r.status === 'completed').length;
+      archivedReviews = reviews.filter(r => r.status === 'archived').length;
+
+      const scores = await db.getAll('democratic_review_scores');
+      const reviewerSet = new Set(scores.map(s => s.reviewer_id));
+      totalParticipants = reviewerSet.size;
+      const mutualScores = scores.filter(s => s.review_type === 'mutual');
+      avgScore = mutualScores.length > 0 ? mutualScores.reduce((sum, s) => sum + (s.score || 0), 0) / mutualScores.length : 0;
+    }
+
+    let byYear, byBranch;
+    if (db.useMySQL) {
+      byYear = await db.exec('SELECT year, COUNT(*) as count FROM democratic_reviews GROUP BY year ORDER BY year DESC');
+      byBranch = await db.exec('SELECT branch, COUNT(*) as count FROM democratic_reviews GROUP BY branch ORDER BY count DESC');
+    } else {
+      const reviews = await db.getAll('democratic_reviews');
+      const yearMap = {};
+      const branchMap = {};
+      reviews.forEach(r => {
+        yearMap[r.year] = (yearMap[r.year] || 0) + 1;
+        branchMap[r.branch] = (branchMap[r.branch] || 0) + 1;
+      });
+      byYear = Object.entries(yearMap).map(([year, count]) => ({ year: parseInt(year), count })).sort((a, b) => b.year - a.year);
+      byBranch = Object.entries(branchMap).map(([branch, count]) => ({ branch, count })).sort((a, b) => b.count - a.count);
+    }
+
+    res.json({
+      code: 200,
+      message: '获取成功',
+      data: {
+        total_reviews: totalReviews,
+        in_progress_reviews: inProgressReviews,
+        completed_reviews: completedReviews,
+        archived_reviews: archivedReviews,
+        total_participants: totalParticipants,
+        avg_score: Math.round(avgScore * 100) / 100,
+        by_year: byYear,
+        by_branch: byBranch
+      }
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ code: 500, message: '服务器内部错误', error: err.message });
+  }
+});
+
+router.get('/democratic-review-stats/export/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const reviewId = parseInt(id);
+
+    const review = await db.getById('democratic_reviews', reviewId);
+    if (!review) return res.status(404).json({ code: 404, message: '评议不存在' });
+
+    const formItems = db.useMySQL
+      ? await db.exec('SELECT * FROM democratic_review_form_items WHERE review_id = ? ORDER BY sort_order', [reviewId])
+      : (await db.findMany('democratic_review_form_items', fi => fi.review_id === reviewId)).sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
+
+    const allUsers = db.useMySQL
+      ? await db.exec("SELECT id, real_name, branch FROM users WHERE branch = ? AND role != 'admin'", [review.branch])
+      : await db.findMany('users', u => u.branch === review.branch && u.role !== 'admin');
+
+    const allScores = db.useMySQL
+      ? await db.exec('SELECT * FROM democratic_review_scores WHERE review_id = ?', [reviewId])
+      : await db.findMany('democratic_review_scores', s => s.review_id === reviewId);
+
+    const scoreItems = formItems.filter(fi => fi.item_type === 'score');
+    const headers = ['姓名', '支部'];
+    scoreItems.forEach(item => {
+      headers.push(`互评-${item.item_name}`);
+      headers.push(`组织评价-${item.item_name}`);
+    });
+    headers.push('互评加权均分', '组织评价加权均分', '综合得分');
+
+    const rows = allUsers.map(user => {
+      const row = [user.real_name, user.branch];
+      const userMutualScores = allScores.filter(s => s.target_user_id === user.id && s.review_type === 'mutual');
+      const userOrgScores = allScores.filter(s => s.target_user_id === user.id && s.review_type === 'organization');
+
+      let mutualWeightedSum = 0;
+      let mutualTotalWeight = 0;
+      let orgWeightedSum = 0;
+      let orgTotalWeight = 0;
+
+      for (const item of scoreItems) {
+        const mutualItemScores = userMutualScores.filter(s => s.form_item_id === item.id);
+        const mutualAvg = mutualItemScores.length > 0
+          ? mutualItemScores.reduce((sum, s) => sum + (s.score || 0), 0) / mutualItemScores.length
+          : 0;
+        row.push(mutualAvg.toFixed(1));
+
+        const orgItemScores = userOrgScores.filter(s => s.form_item_id === item.id);
+        const orgAvg = orgItemScores.length > 0
+          ? orgItemScores.reduce((sum, s) => sum + (s.score || 0), 0) / orgItemScores.length
+          : 0;
+        row.push(orgAvg.toFixed(1));
+
+        mutualWeightedSum += mutualAvg * (item.weight || 1);
+        mutualTotalWeight += (item.weight || 1);
+        orgWeightedSum += orgAvg * (item.weight || 1);
+        orgTotalWeight += (item.weight || 1);
+      }
+
+      const mutualFinal = mutualTotalWeight > 0 ? mutualWeightedSum / mutualTotalWeight : 0;
+      const orgFinal = orgTotalWeight > 0 ? orgWeightedSum / orgTotalWeight : 0;
+      const totalFinal = mutualFinal * 0.4 + orgFinal * 0.6;
+
+      row.push(mutualFinal.toFixed(2));
+      row.push(orgFinal.toFixed(2));
+      row.push(totalFinal.toFixed(2));
+
+      return row;
+    });
+
+    rows.sort((a, b) => parseFloat(b[b.length - 1]) - parseFloat(a[a.length - 1]));
+
+    let csv = '\uFEFF';
+    csv += headers.join(',') + '\n';
+    rows.forEach(row => {
+      csv += row.map(cell => `"${cell}"`).join(',') + '\n';
+    });
+
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename=democratic_review_${reviewId}.csv`);
+    res.send(csv);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ code: 500, message: '服务器内部错误', error: err.message });
+  }
+});
+
 module.exports = router;

@@ -15,6 +15,7 @@
           <router-link to="/volunteer-service" class="nav-link" :class="{ active: $route.name === 'volunteer-service' || $route.name === 'volunteer-service-detail' }">志愿服务</router-link>
           <router-link to="/notices" class="nav-link" :class="{ active: $route.name === 'notices' || $route.name === 'notice-detail' }">支部通知</router-link>
           <router-link to="/branch-meetings" class="nav-link" :class="{ active: $route.name === 'branch-meetings' || $route.name === 'branch-meeting-detail' }">支部会议</router-link>
+          <router-link to="/democratic-review" class="nav-link" :class="{ active: $route.name === 'democratic-review' || $route.name === 'democratic-review-detail' }">民主评议</router-link>
           <router-link v-if="userStore.isLoggedIn" to="/party-development" class="nav-link" :class="{ active: $route.name === 'party-development' }">党员发展</router-link>
           <router-link v-if="userStore.isLoggedIn" to="/party-transfer" class="nav-link" :class="{ active: $route.name === 'party-transfer' }">组织转接</router-link>
         </nav>

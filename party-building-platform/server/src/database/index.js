@@ -35,6 +35,10 @@ let dbData = {
   branch_meeting_attendees: [],
   branch_meeting_checkins: [],
   branch_meeting_resolutions: [],
+  democratic_reviews: [],
+  democratic_review_form_items: [],
+  democratic_review_scores: [],
+  democratic_review_history: [],
   counters: {
     users: 0,
     articles: 0,
@@ -55,7 +59,11 @@ let dbData = {
     branch_meeting_agendas: 0,
     branch_meeting_attendees: 0,
     branch_meeting_checkins: 0,
-    branch_meeting_resolutions: 0
+    branch_meeting_resolutions: 0,
+    democratic_reviews: 0,
+    democratic_review_form_items: 0,
+    democratic_review_scores: 0,
+    democratic_review_history: 0
   }
 };
 
@@ -428,6 +436,72 @@ async function initMySQL() {
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
         FOREIGN KEY (meeting_id) REFERENCES branch_meetings(id) ON DELETE CASCADE,
         FOREIGN KEY (agenda_id) REFERENCES branch_meeting_agendas(id) ON DELETE SET NULL
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    `);
+
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS democratic_reviews (
+        id INTEGER PRIMARY KEY AUTO_INCREMENT,
+        title VARCHAR(500) NOT NULL,
+        year INTEGER NOT NULL,
+        branch VARCHAR(200) NOT NULL,
+        description TEXT,
+        status VARCHAR(20) DEFAULT 'draft',
+        start_date DATETIME,
+        end_date DATETIME,
+        created_by INTEGER,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    `);
+
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS democratic_review_form_items (
+        id INTEGER PRIMARY KEY AUTO_INCREMENT,
+        review_id INTEGER NOT NULL,
+        item_name VARCHAR(200) NOT NULL,
+        item_type VARCHAR(20) DEFAULT 'score',
+        max_score INTEGER DEFAULT 10,
+        options TEXT,
+        sort_order INTEGER DEFAULT 0,
+        weight DECIMAL(5,2) DEFAULT 1.00,
+        required INTEGER DEFAULT 1,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (review_id) REFERENCES democratic_reviews(id) ON DELETE CASCADE
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    `);
+
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS democratic_review_scores (
+        id INTEGER PRIMARY KEY AUTO_INCREMENT,
+        review_id INTEGER NOT NULL,
+        reviewer_id INTEGER NOT NULL,
+        target_user_id INTEGER NOT NULL,
+        review_type VARCHAR(20) NOT NULL DEFAULT 'mutual',
+        form_item_id INTEGER NOT NULL,
+        score DECIMAL(6,2) DEFAULT 0,
+        content TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE KEY unique_score (review_id, reviewer_id, target_user_id, form_item_id, review_type),
+        FOREIGN KEY (review_id) REFERENCES democratic_reviews(id) ON DELETE CASCADE,
+        FOREIGN KEY (reviewer_id) REFERENCES users(id) ON DELETE CASCADE,
+        FOREIGN KEY (target_user_id) REFERENCES users(id) ON DELETE CASCADE,
+        FOREIGN KEY (form_item_id) REFERENCES democratic_review_form_items(id) ON DELETE CASCADE
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    `);
+
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS democratic_review_history (
+        id INTEGER PRIMARY KEY AUTO_INCREMENT,
+        review_id INTEGER NOT NULL,
+        action_type VARCHAR(50) NOT NULL,
+        action_detail TEXT,
+        operator_id INTEGER,
+        operator_name VARCHAR(100),
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (review_id) REFERENCES democratic_reviews(id) ON DELETE CASCADE,
+        FOREIGN KEY (operator_id) REFERENCES users(id) ON DELETE SET NULL
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
     `);
 

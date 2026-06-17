@@ -373,6 +373,64 @@ function initDatabase() {
       FOREIGN KEY (transfer_id) REFERENCES party_transfers(id) ON DELETE CASCADE,
       FOREIGN KEY (operator_id) REFERENCES users(id) ON DELETE SET NULL
     );
+
+    CREATE TABLE IF NOT EXISTS democratic_reviews (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      title TEXT NOT NULL,
+      year INTEGER NOT NULL,
+      branch TEXT NOT NULL,
+      description TEXT,
+      status TEXT DEFAULT 'draft',
+      start_date DATETIME,
+      end_date DATETIME,
+      created_by INTEGER,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS democratic_review_form_items (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      review_id INTEGER NOT NULL,
+      item_name TEXT NOT NULL,
+      item_type TEXT DEFAULT 'score',
+      max_score INTEGER DEFAULT 10,
+      options TEXT,
+      sort_order INTEGER DEFAULT 0,
+      weight REAL DEFAULT 1.0,
+      required INTEGER DEFAULT 1,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (review_id) REFERENCES democratic_reviews(id) ON DELETE CASCADE
+    );
+
+    CREATE TABLE IF NOT EXISTS democratic_review_scores (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      review_id INTEGER NOT NULL,
+      reviewer_id INTEGER NOT NULL,
+      target_user_id INTEGER NOT NULL,
+      review_type TEXT NOT NULL DEFAULT 'mutual',
+      form_item_id INTEGER NOT NULL,
+      score REAL DEFAULT 0,
+      content TEXT,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (review_id) REFERENCES democratic_reviews(id) ON DELETE CASCADE,
+      FOREIGN KEY (reviewer_id) REFERENCES users(id) ON DELETE CASCADE,
+      FOREIGN KEY (target_user_id) REFERENCES users(id) ON DELETE CASCADE,
+      FOREIGN KEY (form_item_id) REFERENCES democratic_review_form_items(id) ON DELETE CASCADE,
+      UNIQUE(review_id, reviewer_id, target_user_id, form_item_id, review_type)
+    );
+
+    CREATE TABLE IF NOT EXISTS democratic_review_history (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      review_id INTEGER NOT NULL,
+      action_type TEXT NOT NULL,
+      action_detail TEXT,
+      operator_id INTEGER,
+      operator_name TEXT,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (review_id) REFERENCES democratic_reviews(id) ON DELETE CASCADE,
+      FOREIGN KEY (operator_id) REFERENCES users(id) ON DELETE SET NULL
+    );
   `);
 
   const adminHash = bcrypt.hashSync('admin123', 10);
@@ -917,6 +975,96 @@ function initDatabase() {
 
   meetingResolutions.forEach(r => {
     insertMeetingResolution.run(r.id, r.meetingId, r.agendaId, r.title, r.content, r.result, r.voteFor, r.voteAgainst, r.voteAbstain, r.resolvedAt);
+  });
+
+  const insertDemocraticReview = db.prepare(`
+    INSERT OR IGNORE INTO democratic_reviews (id, title, year, branch, description, status, start_date, end_date, created_by)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `);
+
+  const democraticReviews = [
+    { id: 1, title: '2024年度党员民主评议', year: 2024, branch: '第一党支部', description: '按照党章要求，对全体党员进行年度民主评议，包括思想政治、学习情况、工作表现、组织纪律、先锋模范作用等方面。', status: 'completed', start_date: addDays(now, -60), end_date: addDays(now, -45), createdBy: 1 },
+    { id: 2, title: '2025年度党员民主评议', year: 2025, branch: '第一党支部', description: '2025年度第一党支部党员民主评议，请各位党员认真对待，客观公正地进行互评。', status: 'in_progress', start_date: addDays(now, -5), end_date: addDays(now, 10), createdBy: 1 },
+    { id: 3, title: '2025年度党员民主评议', year: 2025, branch: '第二党支部', description: '2025年度第二党支部党员民主评议，评议内容包括思想政治素质、业务工作表现、组织纪律观念等。', status: 'published', start_date: addDays(now, 2), end_date: addDays(now, 17), createdBy: 1 },
+    { id: 4, title: '2025年度党员民主评议', year: 2025, branch: '第三党支部', description: '2025年度第三党支部党员民主评议工作。', status: 'draft', start_date: null, end_date: null, createdBy: 1 }
+  ];
+
+  democraticReviews.forEach(r => {
+    insertDemocraticReview.run(r.id, r.title, r.year, r.branch, r.description, r.status, r.start_date, r.end_date, r.createdBy);
+  });
+
+  const insertReviewFormItem = db.prepare(`
+    INSERT OR IGNORE INTO democratic_review_form_items (id, review_id, item_name, item_type, max_score, options, sort_order, weight, required)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `);
+
+  const reviewFormItems = [
+    { id: 1, reviewId: 2, name: '思想政治素质', type: 'score', maxScore: 20, options: '', sortOrder: 1, weight: 0.3, required: 1 },
+    { id: 2, reviewId: 2, name: '业务工作表现', type: 'score', maxScore: 20, options: '', sortOrder: 2, weight: 0.3, required: 1 },
+    { id: 3, reviewId: 2, name: '组织纪律观念', type: 'score', maxScore: 20, options: '', sortOrder: 3, weight: 0.2, required: 1 },
+    { id: 4, reviewId: 2, name: '先锋模范作用', type: 'score', maxScore: 20, options: '', sortOrder: 4, weight: 0.2, required: 1 },
+    { id: 5, reviewId: 2, name: '综合评价意见', type: 'text', maxScore: 0, options: '', sortOrder: 5, weight: 0, required: 0 },
+    { id: 6, reviewId: 3, name: '思想政治素质', type: 'score', maxScore: 25, options: '', sortOrder: 1, weight: 0.3, required: 1 },
+    { id: 7, reviewId: 3, name: '业务工作表现', type: 'score', maxScore: 25, options: '', sortOrder: 2, weight: 0.3, required: 1 },
+    { id: 8, reviewId: 3, name: '组织纪律观念', type: 'score', maxScore: 25, options: '', sortOrder: 3, weight: 0.2, required: 1 },
+    { id: 9, reviewId: 3, name: '先锋模范作用', type: 'score', maxScore: 25, options: '', sortOrder: 4, weight: 0.2, required: 1 },
+    { id: 10, reviewId: 1, name: '思想政治素质', type: 'score', maxScore: 25, options: '', sortOrder: 1, weight: 0.3, required: 1 },
+    { id: 11, reviewId: 1, name: '业务工作表现', type: 'score', maxScore: 25, options: '', sortOrder: 2, weight: 0.3, required: 1 },
+    { id: 12, reviewId: 1, name: '组织纪律观念', type: 'score', maxScore: 25, options: '', sortOrder: 3, weight: 0.2, required: 1 },
+    { id: 13, reviewId: 1, name: '先锋模范作用', type: 'score', maxScore: 25, options: '', sortOrder: 4, weight: 0.2, required: 1 }
+  ];
+
+  reviewFormItems.forEach(item => {
+    insertReviewFormItem.run(item.id, item.reviewId, item.name, item.type, item.maxScore, item.options, item.sortOrder, item.weight, item.required);
+  });
+
+  const insertReviewScore = db.prepare(`
+    INSERT OR IGNORE INTO democratic_review_scores (id, review_id, reviewer_id, target_user_id, review_type, form_item_id, score, content)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+  `);
+
+  const reviewScores = [
+    { id: 1, reviewId: 1, reviewerId: 2, targetId: 5, type: 'mutual', itemId: 10, score: 22, content: '' },
+    { id: 2, reviewId: 1, reviewerId: 2, targetId: 5, type: 'mutual', itemId: 11, score: 20, content: '' },
+    { id: 3, reviewId: 1, reviewerId: 2, targetId: 5, type: 'mutual', itemId: 12, score: 23, content: '' },
+    { id: 4, reviewId: 1, reviewerId: 2, targetId: 5, type: 'mutual', itemId: 13, score: 21, content: '' },
+    { id: 5, reviewId: 1, reviewerId: 1, targetId: 2, type: 'organization', itemId: 10, score: 23, content: '表现良好' },
+    { id: 6, reviewId: 1, reviewerId: 1, targetId: 2, type: 'organization', itemId: 11, score: 22, content: '' },
+    { id: 7, reviewId: 1, reviewerId: 1, targetId: 2, type: 'organization', itemId: 12, score: 24, content: '' },
+    { id: 8, reviewId: 1, reviewerId: 1, targetId: 2, type: 'organization', itemId: 13, score: 22, content: '' },
+    { id: 9, reviewId: 2, reviewerId: 2, targetId: 5, type: 'mutual', itemId: 1, score: 18, content: '' },
+    { id: 10, reviewId: 2, reviewerId: 2, targetId: 5, type: 'mutual', itemId: 2, score: 17, content: '' },
+    { id: 11, reviewId: 2, reviewerId: 2, targetId: 5, type: 'mutual', itemId: 3, score: 19, content: '' },
+    { id: 12, reviewId: 2, reviewerId: 2, targetId: 5, type: 'mutual', itemId: 4, score: 16, content: '' },
+    { id: 13, reviewId: 2, reviewerId: 1, targetId: 2, type: 'organization', itemId: 1, score: 19, content: '工作积极' },
+    { id: 14, reviewId: 2, reviewerId: 1, targetId: 2, type: 'organization', itemId: 2, score: 18, content: '' },
+    { id: 15, reviewId: 2, reviewerId: 1, targetId: 2, type: 'organization', itemId: 3, score: 20, content: '' },
+    { id: 16, reviewId: 2, reviewerId: 1, targetId: 2, type: 'organization', itemId: 4, score: 18, content: '' }
+  ];
+
+  reviewScores.forEach(s => {
+    insertReviewScore.run(s.id, s.reviewId, s.reviewerId, s.targetId, s.type, s.itemId, s.score, s.content);
+  });
+
+  const insertReviewHistory = db.prepare(`
+    INSERT OR IGNORE INTO democratic_review_history (id, review_id, action_type, action_detail, operator_id, operator_name)
+    VALUES (?, ?, ?, ?, ?, ?)
+  `);
+
+  const reviewHistories = [
+    { id: 1, reviewId: 1, actionType: 'create', detail: '创建民主评议', opId: 1, opName: '系统管理员' },
+    { id: 2, reviewId: 1, actionType: 'publish', detail: '发布评议，开始时间：2024-10-15', opId: 1, opName: '系统管理员' },
+    { id: 3, reviewId: 1, actionType: 'complete', detail: '评议完成，共15人参与', opId: 1, opName: '系统管理员' },
+    { id: 4, reviewId: 1, actionType: 'archive', detail: '评议已归档', opId: 1, opName: '系统管理员' },
+    { id: 5, reviewId: 2, actionType: 'create', detail: '创建民主评议', opId: 1, opName: '系统管理员' },
+    { id: 6, reviewId: 2, actionType: 'publish', detail: '发布评议，开始时间：2025-06-12', opId: 1, opName: '系统管理员' },
+    { id: 7, reviewId: 2, actionType: 'start', detail: '评议开始', opId: 1, opName: '系统管理员' },
+    { id: 8, reviewId: 3, actionType: 'create', detail: '创建民主评议', opId: 1, opName: '系统管理员' },
+    { id: 9, reviewId: 3, actionType: 'publish', detail: '发布评议，开始时间：2025-06-19', opId: 1, opName: '系统管理员' }
+  ];
+
+  reviewHistories.forEach(h => {
+    insertReviewHistory.run(h.id, h.reviewId, h.actionType, h.detail, h.opId, h.opName);
   });
 
   console.log('数据库初始化完成！');

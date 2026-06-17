@@ -50,6 +50,14 @@
           <span class="nav-icon">🔄</span>
           <span class="nav-text">组织转接</span>
         </router-link>
+        <router-link to="/admin/democratic-review" class="nav-item" :class="{ active: $route.name === 'admin-democratic-review' }">
+          <span class="nav-icon">📊</span>
+          <span class="nav-text">民主评议</span>
+        </router-link>
+        <router-link to="/admin/democratic-review-stats" class="nav-item" :class="{ active: $route.name === 'admin-democratic-review-stats' }">
+          <span class="nav-icon">📈</span>
+          <span class="nav-text">评议统计</span>
+        </router-link>
       </nav>
       <div class="sidebar-footer">
         <router-link to="/" class="back-link">← 返回前台</router-link>

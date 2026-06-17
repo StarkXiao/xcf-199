@@ -109,6 +109,18 @@ const router = createRouter({
           name: 'party-transfer',
           component: () => import('@/views/PartyTransfer.vue'),
           meta: { title: '组织关系转接', requiresAuth: true }
+        },
+        {
+          path: 'democratic-review',
+          name: 'democratic-review',
+          component: () => import('@/views/DemocraticReview.vue'),
+          meta: { title: '民主评议' }
+        },
+        {
+          path: 'democratic-review/:id',
+          name: 'democratic-review-detail',
+          component: () => import('@/views/DemocraticReviewDetail.vue'),
+          meta: { title: '评议详情' }
         }
       ]
     },
@@ -194,6 +206,18 @@ const router = createRouter({
           name: 'admin-party-transfer',
           component: () => import('@/views/admin/PartyTransfer.vue'),
           meta: { title: '管理后台 - 组织关系转接审批' }
+        },
+        {
+          path: 'democratic-review',
+          name: 'admin-democratic-review',
+          component: () => import('@/views/admin/DemocraticReview.vue'),
+          meta: { title: '管理后台 - 民主评议管理' }
+        },
+        {
+          path: 'democratic-review-stats',
+          name: 'admin-democratic-review-stats',
+          component: () => import('@/views/admin/DemocraticReviewStats.vue'),
+          meta: { title: '管理后台 - 民主评议统计' }
         }
       ]
     },

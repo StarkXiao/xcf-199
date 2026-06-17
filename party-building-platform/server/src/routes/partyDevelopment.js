@@ -1,8 +1,50 @@
 const express = require('express');
+const multer = require('multer');
+const path = require('path');
+const fs = require('fs');
 const db = require('../database');
 const { authMiddleware, adminMiddleware } = require('../middleware/auth');
 
 const router = express.Router();
+
+const getStorage = (req) => {
+  const materialsDir = req.app.get('materialsDir');
+  return multer.diskStorage({
+    destination: (req, file, cb) => {
+      const devId = req.body.development_id || 'temp';
+      const targetDir = path.join(materialsDir, String(devId));
+      if (!fs.existsSync(targetDir)) {
+        fs.mkdirSync(targetDir, { recursive: true });
+      }
+      cb(null, targetDir);
+    },
+    filename: (req, file, cb) => {
+      const ext = path.extname(file.originalname);
+      const timestamp = Date.now();
+      const random = Math.floor(Math.random() * 1000);
+      const safeName = file.originalname.replace(/[\\/:*?"<>|]/g, '_');
+      cb(null, `${timestamp}_${random}_${safeName}`);
+    }
+  });
+};
+
+const createUpload = (req) => multer({
+  storage: getStorage(req),
+  limits: { fileSize: 50 * 1024 * 1024 },
+  fileFilter: (req, file, cb) => {
+    const allowedTypes = [
+      '.pdf', '.doc', '.docx', '.xls', '.xlsx', '.ppt', '.pptx',
+      '.jpg', '.jpeg', '.png', '.gif', '.bmp', '.webp',
+      '.txt', '.zip', '.rar'
+    ];
+    const ext = path.extname(file.originalname).toLowerCase();
+    if (allowedTypes.includes(ext)) {
+      cb(null, true);
+    } else {
+      cb(new Error('不支持的文件类型，支持：PDF、Office文档、图片、压缩包'));
+    }
+  }
+});
 
 const STAGE_CONFIG = [
   { code: 'application', name: '入党申请', sortOrder: 1, description: '提交入党申请书，党支部初审' },
@@ -122,6 +164,76 @@ router.post('/apply', authMiddleware, async (req, res) => {
   }
 });
 
+router.post('/materials/upload', authMiddleware, (req, res) => {
+  const upload = createUpload(req).single('file');
+  upload(req, res, async (err) => {
+    if (err instanceof multer.MulterError) {
+      if (err.code === 'LIMIT_FILE_SIZE') {
+        return res.status(400).json({ code: 400, message: '文件大小不能超过50MB' });
+      }
+      return res.status(400).json({ code: 400, message: '文件上传失败：' + err.message });
+    }
+    if (err) {
+      return res.status(400).json({ code: 400, message: err.message });
+    }
+    if (!req.file) {
+      return res.status(400).json({ code: 400, message: '请选择要上传的文件' });
+    }
+
+    try {
+      const { development_id, stage_code, material_name, material_type, description } = req.body;
+
+      if (!development_id) {
+        fs.unlinkSync(req.file.path);
+        return res.status(400).json({ code: 400, message: '发展记录ID不能为空' });
+      }
+
+      const development = await db.getById('party_development', development_id);
+      if (!development) {
+        fs.unlinkSync(req.file.path);
+        return res.status(404).json({ code: 404, message: '发展记录不存在' });
+      }
+
+      if (development.user_id !== req.user.id && req.user.role !== 'admin') {
+        fs.unlinkSync(req.file.path);
+        return res.status(403).json({ code: 403, message: '无权操作' });
+      }
+
+      const finalName = material_name && material_name.trim() ? material_name : req.file.originalname;
+      const fileUrl = `/uploads/materials/${development_id}/${req.file.filename}`;
+      const ext = path.extname(req.file.originalname).toLowerCase();
+      const finalType = material_type || ext.substring(1);
+
+      const material = await db.insert(
+        'party_development_materials',
+        {
+          development_id: parseInt(development_id),
+          stage_code: stage_code || null,
+          material_name: finalName,
+          material_type: finalType,
+          file_url: fileUrl,
+          file_size: req.file.size,
+          uploaded_by: req.user.id,
+          description: description || null
+        },
+        'INSERT INTO party_development_materials (development_id, stage_code, material_name, material_type, file_url, file_size, uploaded_by, description) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+        [parseInt(development_id), stage_code || null, finalName, finalType, fileUrl, req.file.size, req.user.id, description || null]
+      );
+
+      const user = await db.getById('users', req.user.id);
+      await addHistory(parseInt(development_id), stage_code || development.current_stage, 'upload', `上传材料：${finalName}`, req.user.id, user ? user.real_name : '未知用户');
+
+      res.json({ code: 200, message: '材料上传成功', data: material });
+    } catch (innerErr) {
+      if (req.file && req.file.path && fs.existsSync(req.file.path)) {
+        fs.unlinkSync(req.file.path);
+      }
+      console.error(innerErr);
+      res.status(500).json({ code: 500, message: '服务器内部错误', error: innerErr.message });
+    }
+  });
+});
+
 router.post('/materials', authMiddleware, async (req, res) => {
   try {
     const { development_id, stage_code, material_name, material_type, file_url, file_size, description } = req.body;
@@ -172,12 +284,57 @@ router.delete('/materials/:id', authMiddleware, async (req, res) => {
       return res.status(403).json({ code: 403, message: '无权操作' });
     }
 
+    if (material.file_url) {
+      const materialsDir = req.app.get('materialsDir');
+      const relativePath = material.file_url.replace('/uploads/materials/', '');
+      const absolutePath = path.join(materialsDir, relativePath);
+      if (fs.existsSync(absolutePath)) {
+        try { fs.unlinkSync(absolutePath); } catch (e) { console.warn('删除文件失败', e.message); }
+      }
+    }
+
     await db.remove('party_development_materials', req.params.id);
 
     const user = await db.getById('users', req.user.id);
     await addHistory(material.development_id, material.stage_code, 'delete_material', `删除材料：${material.material_name}`, req.user.id, user ? user.real_name : '未知用户');
 
     res.json({ code: 200, message: '材料删除成功' });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ code: 500, message: '服务器内部错误', error: err.message });
+  }
+});
+
+router.get('/materials/download/:id', authMiddleware, async (req, res) => {
+  try {
+    const material = await db.getById('party_development_materials', req.params.id);
+    if (!material || !material.file_url) {
+      return res.status(404).json({ code: 404, message: '材料不存在' });
+    }
+
+    const development = await db.getById('party_development', material.development_id);
+    if (!development) {
+      return res.status(404).json({ code: 404, message: '发展记录不存在' });
+    }
+
+    if (development.user_id !== req.user.id && req.user.role !== 'admin') {
+      return res.status(403).json({ code: 403, message: '无权操作' });
+    }
+
+    const materialsDir = req.app.get('materialsDir');
+    const relativePath = material.file_url.replace('/uploads/materials/', '');
+    const absolutePath = path.join(materialsDir, relativePath);
+
+    if (!fs.existsSync(absolutePath)) {
+      return res.status(404).json({ code: 404, message: '文件已不存在' });
+    }
+
+    res.download(absolutePath, material.material_name, (err) => {
+      if (err) {
+        console.error(err);
+        res.status(500).json({ code: 500, message: '下载失败' });
+      }
+    });
   } catch (err) {
     console.error(err);
     res.status(500).json({ code: 500, message: '服务器内部错误', error: err.message });

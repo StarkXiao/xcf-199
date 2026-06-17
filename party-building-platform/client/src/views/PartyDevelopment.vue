@@ -132,15 +132,33 @@
                 </div>
                 <div v-else class="materials-list">
                   <div v-for="mat in stageMaterials" :key="mat.id" class="material-item">
-                    <span class="material-icon">📄</span>
+                    <span class="material-icon">{{ getFileIcon(mat.material_name, mat.material_type) }}</span>
                     <div class="material-info">
-                      <span class="material-name">{{ mat.material_name }}</span>
+                      <a
+                        v-if="mat.file_url"
+                        :href="getMaterialPreviewUrl(mat.file_url)"
+                        target="_blank"
+                        class="material-name-link"
+                      >{{ mat.material_name }}</a>
+                      <span v-else class="material-name">{{ mat.material_name }}</span>
                       <span v-if="mat.description" class="material-desc">{{ mat.description }}</span>
-                      <span class="material-date">{{ formatDateTime(mat.created_at) }}</span>
+                      <span class="material-date">
+                        {{ formatDateTime(mat.created_at) }}
+                        <span v-if="mat.file_size"> · {{ formatFileSize(mat.file_size) }}</span>
+                      </span>
                     </div>
-                    <button class="btn-icon" @click="handleDeleteMaterial(mat.id)" title="删除">
-                      ×
-                    </button>
+                    <div class="material-actions">
+                      <a
+                        v-if="mat.file_url"
+                        :href="getMaterialDownloadUrl(mat.id)"
+                        class="btn-icon action"
+                        title="下载"
+                        @click.stop
+                      >⬇️</a>
+                      <button class="btn-icon" @click="handleDeleteMaterial(mat.id)" title="删除">
+                        ×
+                      </button>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -160,16 +178,44 @@
               <tr>
                 <th>材料名称</th>
                 <th>所属阶段</th>
+                <th>大小</th>
                 <th>上传时间</th>
                 <th>说明</th>
+                <th>操作</th>
               </tr>
             </thead>
             <tbody>
               <tr v-for="mat in development.materials" :key="mat.id">
-                <td>📄 {{ mat.material_name }}</td>
+                <td>
+                  <span class="file-cell-icon">{{ getFileIcon(mat.material_name, mat.material_type) }}</span>
+                  <a
+                    v-if="mat.file_url"
+                    :href="getMaterialPreviewUrl(mat.file_url)"
+                    target="_blank"
+                    class="file-cell-link"
+                  >{{ mat.material_name }}</a>
+                  <span v-else>{{ mat.material_name }}</span>
+                </td>
                 <td>{{ getStageName(mat.stage_code) }}</td>
+                <td>{{ mat.file_size ? formatFileSize(mat.file_size) : '-' }}</td>
                 <td>{{ formatDateTime(mat.created_at) }}</td>
                 <td>{{ mat.description || '-' }}</td>
+                <td>
+                  <div class="table-actions">
+                    <a
+                      v-if="mat.file_url"
+                      :href="getMaterialPreviewUrl(mat.file_url)"
+                      target="_blank"
+                      class="link-btn"
+                    >预览</a>
+                    <a
+                      v-if="mat.file_url"
+                      :href="getMaterialDownloadUrl(mat.id)"
+                      class="link-btn primary"
+                    >下载</a>
+                    <button class="link-btn danger" @click="handleDeleteMaterial(mat.id)">删除</button>
+                  </div>
+                </td>
               </tr>
             </tbody>
           </table>
@@ -200,16 +246,49 @@
       </div>
     </div>
 
-    <div v-if="showUploadModal" class="modal-overlay" @click.self="showUploadModal = false">
+    <div v-if="showUploadModal" class="modal-overlay" @click.self="closeUploadModal">
       <div class="modal">
         <div class="modal-header">
           <h3>上传材料</h3>
-          <button class="btn-icon" @click="showUploadModal = false">×</button>
+          <button class="btn-icon" @click="closeUploadModal">×</button>
         </div>
         <div class="modal-body">
+          <div
+            class="file-upload-area real"
+            :class="{ drag: isDragging, selected: selectedFile }"
+            @click="triggerFileInput"
+            @dragover.prevent="isDragging = true"
+            @dragleave="isDragging = false"
+            @drop.prevent="handleFileDrop"
+          >
+            <input
+              ref="fileInputRef"
+              type="file"
+              style="display: none"
+              :accept="acceptFileTypes"
+              @change="handleFileSelect"
+            />
+            <div v-if="!selectedFile">
+              <span class="file-icon">📤</span>
+              <p class="file-text">{{ isDragging ? '松开鼠标上传文件' : '点击或拖拽文件到此区域上传' }}</p>
+              <p class="file-hint">支持 PDF、Word、Excel、PPT、图片、压缩包等，单个文件不超过 50MB</p>
+            </div>
+            <div v-else class="selected-file">
+              <span class="sf-icon">{{ getFileIcon(selectedFile.name) }}</span>
+              <div class="sf-info">
+                <span class="sf-name">{{ selectedFile.name }}</span>
+                <span class="sf-size">{{ formatFileSize(selectedFile.size) }}</span>
+              </div>
+              <button class="btn-icon remove-file" @click.stop="clearSelectedFile">×</button>
+            </div>
+          </div>
           <div class="form-group">
             <label>材料名称 *</label>
-            <input v-model="uploadForm.material_name" type="text" placeholder="请输入材料名称" />
+            <input
+              v-model="uploadForm.material_name"
+              type="text"
+              placeholder="默认取文件名，可手动修改"
+            />
           </div>
           <div class="form-group">
             <label>材料类型</label>
@@ -220,6 +299,9 @@
               <option value="certificate">培训证书</option>
               <option value="political_review">政审材料</option>
               <option value="application_form">入党志愿书</option>
+              <option value="pdf">PDF文档</option>
+              <option value="doc">Word文档</option>
+              <option value="image">图片</option>
               <option value="other">其他</option>
             </select>
           </div>
@@ -227,19 +309,21 @@
             <label>说明</label>
             <textarea v-model="uploadForm.description" placeholder="请输入材料说明（选填）"></textarea>
           </div>
-          <div class="form-group">
-            <label>文件（模拟上传）</label>
-            <div class="file-upload-area">
-              <span class="file-icon">📤</span>
-              <p class="file-text">点击或拖拽文件到此区域上传</p>
-              <p class="file-hint">演示模式：系统将自动生成模拟文件记录</p>
+          <div v-if="uploadProgress > 0 && uploadProgress < 100" class="progress-bar-wrap">
+            <div class="progress-bar">
+              <div class="progress-bar-inner" :style="{ width: uploadProgress + '%' }"></div>
             </div>
+            <span class="progress-text">{{ uploadProgress }}%</span>
           </div>
         </div>
         <div class="modal-footer">
-          <button class="btn btn-outline" @click="showUploadModal = false">取消</button>
-          <button class="btn btn-primary" @click="handleUpload" :disabled="!uploadForm.material_name">
-            确认上传
+          <button class="btn btn-outline" @click="closeUploadModal" :disabled="uploading">取消</button>
+          <button
+            class="btn btn-primary"
+            @click="handleUpload"
+            :disabled="!selectedFile || uploading || !uploadForm.material_name"
+          >
+            {{ uploading ? `上传中 ${uploadProgress}%` : '确认上传' }}
           </button>
         </div>
       </div>
@@ -248,14 +332,27 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
-import { getMyDevelopment, applyForParty, uploadMaterial, deleteMaterial } from '@/api/partyDevelopment'
+import { ref, computed, onMounted, watch, nextTick } from 'vue'
+import {
+  getMyDevelopment,
+  applyForParty,
+  uploadMaterialFile,
+  deleteMaterial,
+  getMaterialDownloadUrl,
+  getMaterialPreviewUrl
+} from '@/api/partyDevelopment'
 import type { PartyDevelopment, PartyDevelopmentMaterial, PartyStageCode } from '@/types'
 
 const loading = ref(false)
 const applying = ref(false)
 const development = ref<PartyDevelopment | null>(null)
 const showUploadModal = ref(false)
+const uploading = ref(false)
+const uploadProgress = ref(0)
+const isDragging = ref(false)
+const selectedFile = ref<File | null>(null)
+const fileInputRef = ref<HTMLInputElement | null>(null)
+const acceptFileTypes = '.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.jpg,.jpeg,.png,.gif,.bmp,.webp,.txt,.zip,.rar'
 const uploadForm = ref({
   material_name: '',
   material_type: '',
@@ -366,29 +463,119 @@ const handleApply = async () => {
   }
 }
 
-const handleUpload = async () => {
-  if (!development.value || !uploadForm.value.material_name) return
-  try {
-    await uploadMaterial({
-      development_id: development.value.id,
-      stage_code: development.value.current_stage,
-      material_name: uploadForm.value.material_name,
-      material_type: uploadForm.value.material_type || undefined,
-      description: uploadForm.value.description || undefined,
-      file_url: `/uploads/demo/${Date.now()}.pdf`,
-      file_size: Math.floor(Math.random() * 1000000) + 100000
+const formatFileSize = (bytes: number): string => {
+  if (bytes === 0) return '0 B'
+  const k = 1024
+  const sizes = ['B', 'KB', 'MB', 'GB']
+  const i = Math.floor(Math.log(bytes) / Math.log(k))
+  return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i]
+}
+
+const getFileIcon = (name?: string, type?: string): string => {
+  const ext = ((name || '').split('.').pop() || (type || '')).toLowerCase()
+  const map: Record<string, string> = {
+    pdf: '📕', doc: '📘', docx: '📘', xls: '📗', xlsx: '📗',
+    ppt: '📙', pptx: '📙', txt: '📄',
+    jpg: '🖼️', jpeg: '🖼️', png: '🖼️', gif: '🖼️', bmp: '🖼️', webp: '🖼️',
+    zip: '📦', rar: '📦', '7z': '📦',
+    application: '📝', thought_report: '✍️', certificate: '🏆',
+    political_review: '📋', application_form: '📑'
+  }
+  return map[ext] || map[type || ''] || '📎'
+}
+
+const triggerFileInput = () => {
+  fileInputRef.value?.click()
+}
+
+const handleFileSelect = (e: Event) => {
+  const target = e.target as HTMLInputElement
+  const file = target.files?.[0]
+  if (file) {
+    setSelectedFile(file)
+  }
+}
+
+const handleFileDrop = (e: DragEvent) => {
+  isDragging.value = false
+  const file = e.dataTransfer?.files?.[0]
+  if (file) {
+    setSelectedFile(file)
+  }
+}
+
+const setSelectedFile = (file: File) => {
+  if (file.size > 50 * 1024 * 1024) {
+    alert('文件大小不能超过50MB')
+    return
+  }
+  selectedFile.value = file
+  if (!uploadForm.value.material_name) {
+    const dotIdx = file.name.lastIndexOf('.')
+    uploadForm.value.material_name = dotIdx > 0 ? file.name.substring(0, dotIdx) : file.name
+  }
+}
+
+const clearSelectedFile = () => {
+  selectedFile.value = null
+  if (fileInputRef.value) {
+    fileInputRef.value.value = ''
+  }
+}
+
+const closeUploadModal = () => {
+  if (uploading.value) return
+  showUploadModal.value = false
+  clearSelectedFile()
+  uploadForm.value = { material_name: '', material_type: '', description: '' }
+  uploadProgress.value = 0
+}
+
+watch(showUploadModal, (val) => {
+  if (val) {
+    nextTick(() => {
+      uploadProgress.value = 0
     })
-    showUploadModal.value = false
-    uploadForm.value = { material_name: '', material_type: '', description: '' }
-    await loadDevelopment()
-  } catch (error) {
+  }
+})
+
+const handleUpload = async () => {
+  if (!development.value || !selectedFile.value || !uploadForm.value.material_name) return
+  uploading.value = true
+  uploadProgress.value = 0
+  try {
+    const formData = new FormData()
+    formData.append('file', selectedFile.value)
+    formData.append('development_id', String(development.value.id))
+    formData.append('stage_code', development.value.current_stage)
+    formData.append('material_name', uploadForm.value.material_name)
+    if (uploadForm.value.material_type) {
+      formData.append('material_type', uploadForm.value.material_type)
+    }
+    if (uploadForm.value.description) {
+      formData.append('description', uploadForm.value.description)
+    }
+
+    await uploadMaterialFile(formData, (progress) => {
+      uploadProgress.value = progress
+    })
+
+    uploadProgress.value = 100
+    setTimeout(() => {
+      closeUploadModal()
+      loadDevelopment()
+    }, 300)
+  } catch (error: any) {
     console.error('上传材料失败', error)
-    alert('上传失败，请稍后重试')
+    const msg = error?.response?.data?.message || error?.message || '上传失败，请稍后重试'
+    alert(msg)
+  } finally {
+    uploading.value = false
   }
 }
 
 const handleDeleteMaterial = async (id: number) => {
-  if (!confirm('确定删除该材料吗？')) return
+  if (!confirm('确定删除该材料吗？删除后文件无法恢复。')) return
   try {
     await deleteMaterial(id)
     await loadDevelopment()
@@ -1110,5 +1297,183 @@ onMounted(() => {
     flex-direction: column;
     gap: 4px;
   }
+}
+
+.material-item .material-name-link {
+  color: var(--primary-color);
+  text-decoration: none;
+  font-weight: 500;
+  font-size: 14px;
+}
+
+.material-item .material-name-link:hover {
+  text-decoration: underline;
+}
+
+.material-actions {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.material-actions .btn-icon.action {
+  font-size: 16px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  text-decoration: none;
+}
+
+.material-actions .btn-icon.action:hover {
+  background: var(--primary-color);
+  color: white;
+}
+
+.file-cell-icon {
+  margin-right: 8px;
+  font-size: 16px;
+}
+
+.file-cell-link {
+  color: var(--primary-color);
+  text-decoration: none;
+  font-weight: 500;
+}
+
+.file-cell-link:hover {
+  text-decoration: underline;
+}
+
+.table-actions {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.link-btn {
+  background: none;
+  border: none;
+  padding: 0;
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-size: 13px;
+  text-decoration: none;
+}
+
+.link-btn:hover {
+  color: var(--text-primary);
+  text-decoration: underline;
+}
+
+.link-btn.primary {
+  color: var(--primary-color);
+}
+
+.link-btn.danger {
+  color: #ff4d4f;
+}
+
+.link-btn.danger:hover {
+  color: #d9363e;
+}
+
+.file-upload-area.real {
+  user-select: none;
+}
+
+.file-upload-area.real.drag {
+  border-color: var(--primary-color);
+  background: rgba(197, 49, 50, 0.05);
+}
+
+.file-upload-area.real.selected {
+  background: var(--bg-light);
+  padding: 16px 20px;
+  text-align: left;
+  cursor: default;
+}
+
+.selected-file {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.sf-icon {
+  font-size: 36px;
+  flex-shrink: 0;
+}
+
+.sf-info {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.sf-name {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.sf-size {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.remove-file {
+  flex-shrink: 0;
+  background: #f5f5f5;
+  color: var(--text-secondary);
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  line-height: 1;
+  transition: all 0.2s;
+}
+
+.remove-file:hover {
+  background: #ff4d4f;
+  color: white;
+}
+
+.progress-bar-wrap {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 4px;
+}
+
+.progress-bar {
+  flex: 1;
+  height: 8px;
+  background: #f0f0f0;
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.progress-bar-inner {
+  height: 100%;
+  background: var(--primary-color);
+  border-radius: 4px;
+  transition: width 0.3s ease;
+}
+
+.progress-bar-wrap .progress-text {
+  font-size: 13px;
+  color: var(--text-secondary);
+  font-weight: 500;
+  min-width: 42px;
+  text-align: right;
 }
 </style>

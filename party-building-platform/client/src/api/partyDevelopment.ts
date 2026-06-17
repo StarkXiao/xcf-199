@@ -56,8 +56,35 @@ export const uploadMaterial = (data: UploadMaterialData) => {
   return request.post<any, ApiResponse<PartyDevelopmentMaterial>>('/party-development/materials', data)
 }
 
+export const uploadMaterialFile = (formData: FormData, onProgress?: (progress: number) => void) => {
+  return request.post<any, ApiResponse<PartyDevelopmentMaterial>>(
+    '/party-development/materials/upload',
+    formData,
+    {
+      headers: { 'Content-Type': 'multipart/form-data' },
+      onUploadProgress: onProgress ? (progressEvent: any) => {
+        const percentCompleted = progressEvent.total
+          ? Math.round((progressEvent.loaded * 100) / progressEvent.total)
+          : 0
+        onProgress(percentCompleted)
+      } : undefined
+    }
+  )
+}
+
 export const deleteMaterial = (id: number) => {
   return request.delete<any, ApiResponse<null>>(`/party-development/materials/${id}`)
+}
+
+export const getMaterialDownloadUrl = (id: number) => {
+  return `${import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000/api'}/party-development/materials/download/${id}`
+}
+
+export const getMaterialPreviewUrl = (fileUrl: string) => {
+  if (!fileUrl) return ''
+  if (fileUrl.startsWith('http')) return fileUrl
+  const base = (import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000').replace(/\/api$/, '')
+  return base + fileUrl
 }
 
 export const getStageConfig = () => {

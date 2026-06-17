@@ -169,7 +169,7 @@
             <div class="info-section card-inner">
               <div class="section-header-row">
                 <h4 class="sub-title">阶段进度管理</h4>
-                <button class="btn btn-sm btn-outline" @click="showEditInfo = true">编辑信息</button>
+                <button class="btn btn-sm btn-outline" @click="openEditInfo">编辑信息</button>
               </div>
               <div class="stages-manager">
                 <div
@@ -217,12 +217,32 @@
               </div>
               <div v-else class="materials-grid">
                 <div v-for="mat in detailData.materials" :key="mat.id" class="material-card">
-                  <span class="material-icon">📄</span>
+                  <span class="material-icon">{{ getFileIcon(mat.material_name, mat.material_type) }}</span>
                   <div class="material-info">
-                    <span class="material-name">{{ mat.material_name }}</span>
+                    <a
+                      v-if="mat.file_url"
+                      :href="getMaterialPreviewUrl(mat.file_url)"
+                      target="_blank"
+                      class="material-name-link"
+                    >{{ mat.material_name }}</a>
+                    <span v-else class="material-name">{{ mat.material_name }}</span>
                     <span class="material-meta">
                       {{ getStageName(mat.stage_code) }} · {{ formatDateTime(mat.created_at) }}
+                      <span v-if="mat.file_size"> · {{ formatFileSize(mat.file_size) }}</span>
                     </span>
+                  </div>
+                  <div v-if="mat.file_url" class="mc-actions">
+                    <a
+                      :href="getMaterialPreviewUrl(mat.file_url)"
+                      target="_blank"
+                      class="mc-btn"
+                      title="预览"
+                    >👁️</a>
+                    <a
+                      :href="getMaterialDownloadUrl(mat.id)"
+                      class="mc-btn"
+                      title="下载"
+                    >⬇️</a>
                   </div>
                 </div>
               </div>
@@ -327,7 +347,9 @@ import {
   getAdminDevDetail,
   getReminders,
   updateStage,
-  updateDevInfo
+  updateDevInfo,
+  getMaterialDownloadUrl,
+  getMaterialPreviewUrl
 } from '@/api/partyDevelopment'
 import type {
   PartyDevelopment,
@@ -451,6 +473,27 @@ const formatDateTime = (dateStr?: string) => {
   if (!dateStr) return '-'
   const date = new Date(dateStr)
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')} ${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`
+}
+
+const formatFileSize = (bytes: number): string => {
+  if (bytes === 0) return '0 B'
+  const k = 1024
+  const sizes = ['B', 'KB', 'MB', 'GB']
+  const i = Math.floor(Math.log(bytes) / Math.log(k))
+  return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i]
+}
+
+const getFileIcon = (name?: string, type?: string): string => {
+  const ext = ((name || '').split('.').pop() || (type || '')).toLowerCase()
+  const map: Record<string, string> = {
+    pdf: '📕', doc: '📘', docx: '📘', xls: '📗', xlsx: '📗',
+    ppt: '📙', pptx: '📙', txt: '📄',
+    jpg: '🖼️', jpeg: '🖼️', png: '🖼️', gif: '🖼️', bmp: '🖼️', webp: '🖼️',
+    zip: '📦', rar: '📦', '7z': '📦',
+    application: '📝', thought_report: '✍️', certificate: '🏆',
+    political_review: '📋', application_form: '📑'
+  }
+  return map[ext] || map[type || ''] || '📎'
 }
 
 const loadList = async () => {
@@ -1133,5 +1176,42 @@ onMounted(() => {
   .filter-row {
     flex-direction: column;
   }
+}
+
+.material-card .material-name-link {
+  color: var(--primary-color);
+  text-decoration: none;
+  font-weight: 500;
+}
+
+.material-card .material-name-link:hover {
+  text-decoration: underline;
+}
+
+.mc-actions {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.mc-btn {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  background: var(--bg-light);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  text-decoration: none;
+  transition: all 0.2s;
+  cursor: pointer;
+}
+
+.mc-btn:hover {
+  background: var(--primary-color);
+  color: white;
+  transform: scale(1.08);
 }
 </style>

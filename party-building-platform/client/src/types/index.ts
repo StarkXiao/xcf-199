@@ -517,3 +517,115 @@ export interface LearningUserStats {
   last_study_date?: string
 }
 
+export type TransferStageCode = 'submit' | 'branch_out' | 'material_check' | 'committee_out' | 'branch_in' | 'committee_in' | 'complete'
+
+export type TransferOverallStatus = 'pending' | 'processing' | 'completed' | 'rejected' | 'cancelled'
+
+export type TransferStageStatus = 'pending' | 'in_progress' | 'completed' | 'rejected'
+
+export type TransferMaterialVerifyStatus = 'pending' | 'passed' | 'rejected'
+
+export type TransferType = 'internal' | 'external'
+
+export type TransferDirection = 'out' | 'in'
+
+export interface PartyTransferStageConfig {
+  code: TransferStageCode
+  name: string
+  sortOrder: number
+  description: string
+  role: string
+  handler: string
+}
+
+export interface PartyTransferRequiredMaterial {
+  name: string
+  type: string
+  required: boolean
+}
+
+export interface PartyTransferStage {
+  id: number
+  transfer_id: number
+  stage_code: TransferStageCode
+  stage_name: string
+  status: TransferStageStatus
+  description?: string
+  handler?: string
+  handler_role?: string
+  opinion?: string
+  handle_date?: string
+  deadline_date?: string
+  sort_order: number
+  created_at: string
+  updated_at: string
+}
+
+export interface PartyTransferMaterial {
+  id: number
+  transfer_id: number
+  stage_code?: TransferStageCode
+  material_name: string
+  material_type?: string
+  file_url?: string
+  file_size?: number
+  uploaded_by?: number
+  is_required: number
+  verify_status: TransferMaterialVerifyStatus
+  verify_opinion?: string
+  verified_by?: number
+  verified_at?: string
+  description?: string
+  created_at: string
+}
+
+export interface PartyTransferHistory {
+  id: number
+  transfer_id: number
+  stage_code?: TransferStageCode
+  action_type: string
+  action_detail?: string
+  operator_id?: number
+  operator_name?: string
+  operator_role?: string
+  created_at: string
+}
+
+export interface PartyTransfer {
+  id: number
+  user_id: number
+  transfer_type: TransferType
+  transfer_direction: TransferDirection
+  from_branch: string
+  to_branch: string
+  from_organization?: string
+  to_organization?: string
+  reason: string
+  remarks?: string
+  current_stage: TransferStageCode
+  overall_status: TransferOverallStatus
+  submit_date?: string
+  expected_date?: string
+  completed_date?: string
+  created_at: string
+  updated_at: string
+  stages?: PartyTransferStage[]
+  materials?: PartyTransferMaterial[]
+  history?: PartyTransferHistory[]
+  user?: User
+  real_name?: string
+  user_branch?: string
+  phone?: string
+}
+
+export interface PartyTransferStats {
+  total: number
+  pending: number
+  processing: number
+  completed: number
+  rejected: number
+  cancelled: number
+  by_stage: { stage: TransferStageCode; name: string; count: number }[]
+  by_month: { month: string; count: number }[]
+}
+

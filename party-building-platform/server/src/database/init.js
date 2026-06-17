@@ -299,6 +299,80 @@ function initDatabase() {
       FOREIGN KEY (meeting_id) REFERENCES branch_meetings(id) ON DELETE CASCADE,
       FOREIGN KEY (agenda_id) REFERENCES branch_meeting_agendas(id) ON DELETE SET NULL
     );
+
+    CREATE TABLE IF NOT EXISTS party_transfers (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL,
+      transfer_type TEXT NOT NULL DEFAULT 'internal',
+      transfer_direction TEXT NOT NULL DEFAULT 'out',
+      from_branch TEXT NOT NULL,
+      to_branch TEXT NOT NULL,
+      from_organization TEXT,
+      to_organization TEXT,
+      reason TEXT NOT NULL,
+      remarks TEXT,
+      current_stage TEXT DEFAULT 'submit',
+      overall_status TEXT DEFAULT 'pending',
+      submit_date DATETIME,
+      expected_date DATETIME,
+      completed_date DATETIME,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    );
+
+    CREATE TABLE IF NOT EXISTS party_transfer_stages (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      transfer_id INTEGER NOT NULL,
+      stage_code TEXT NOT NULL,
+      stage_name TEXT NOT NULL,
+      status TEXT DEFAULT 'pending',
+      description TEXT,
+      handler TEXT,
+      handler_role TEXT,
+      opinion TEXT,
+      handle_date DATETIME,
+      deadline_date DATETIME,
+      sort_order INTEGER DEFAULT 0,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (transfer_id) REFERENCES party_transfers(id) ON DELETE CASCADE
+    );
+
+    CREATE TABLE IF NOT EXISTS party_transfer_materials (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      transfer_id INTEGER NOT NULL,
+      stage_code TEXT,
+      material_name TEXT NOT NULL,
+      material_type TEXT,
+      file_url TEXT,
+      file_size INTEGER,
+      uploaded_by INTEGER,
+      is_required INTEGER DEFAULT 1,
+      verify_status TEXT DEFAULT 'pending',
+      verify_opinion TEXT,
+      verified_by INTEGER,
+      verified_at DATETIME,
+      description TEXT,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (transfer_id) REFERENCES party_transfers(id) ON DELETE CASCADE,
+      FOREIGN KEY (uploaded_by) REFERENCES users(id) ON DELETE SET NULL,
+      FOREIGN KEY (verified_by) REFERENCES users(id) ON DELETE SET NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS party_transfer_history (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      transfer_id INTEGER NOT NULL,
+      stage_code TEXT,
+      action_type TEXT NOT NULL,
+      action_detail TEXT,
+      operator_id INTEGER,
+      operator_name TEXT,
+      operator_role TEXT,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (transfer_id) REFERENCES party_transfers(id) ON DELETE CASCADE,
+      FOREIGN KEY (operator_id) REFERENCES users(id) ON DELETE SET NULL
+    );
   `);
 
   const adminHash = bcrypt.hashSync('admin123', 10);

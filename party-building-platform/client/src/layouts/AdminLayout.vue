@@ -46,6 +46,10 @@
           <span class="nav-icon">📊</span>
           <span class="nav-text">会议统计</span>
         </router-link>
+        <router-link to="/admin/party-transfer" class="nav-item" :class="{ active: $route.name === 'admin-party-transfer' }">
+          <span class="nav-icon">🔄</span>
+          <span class="nav-text">组织转接</span>
+        </router-link>
       </nav>
       <div class="sidebar-footer">
         <router-link to="/" class="back-link">← 返回前台</router-link>

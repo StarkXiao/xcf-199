@@ -103,6 +103,12 @@ const router = createRouter({
           name: 'learning-map',
           component: () => import('@/views/LearningMap.vue'),
           meta: { title: '学习地图' }
+        },
+        {
+          path: 'party-transfer',
+          name: 'party-transfer',
+          component: () => import('@/views/PartyTransfer.vue'),
+          meta: { title: '组织关系转接', requiresAuth: true }
         }
       ]
     },
@@ -182,6 +188,12 @@ const router = createRouter({
           name: 'admin-branch-meeting-stats',
           component: () => import('@/views/admin/BranchMeetingStats.vue'),
           meta: { title: '管理后台 - 支部会议统计分析' }
+        },
+        {
+          path: 'party-transfer',
+          name: 'admin-party-transfer',
+          component: () => import('@/views/admin/PartyTransfer.vue'),
+          meta: { title: '管理后台 - 组织关系转接审批' }
         }
       ]
     },

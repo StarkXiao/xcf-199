@@ -258,7 +258,7 @@
                   <span class="signup-branch">({{ signup.branch }})</span>
                 </div>
                 <div class="signup-detail">
-                  <span>报名理由：{{ signup.apply_reason || '无' }}</span>
+                  <span>报名理由：{{ signup.signup_reason || '无' }}</span>
                 </div>
                 <div class="signup-detail">
                   <span>个人技能：{{ signup.skills || '无' }}</span>

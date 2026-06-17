@@ -189,36 +189,34 @@
             </button>
           </template>
           <template v-else>
-            <template v-if="project.is_signed_up">
-              <template v-if="project.signup_status === 'pending'">
-                <button class="btn btn-warning btn-lg" disabled>
-                  审核中
-                </button>
-                <button class="btn btn-outline btn-lg" @click="handleCancel">
-                  取消报名
-                </button>
-              </template>
-              <template v-else-if="project.signup_status === 'approved'">
-                <button class="btn btn-success btn-lg" disabled>
-                  ✓ 已通过
-                </button>
-              </template>
-              <template v-else-if="project.signup_status === 'rejected'">
-                <button class="btn btn-danger btn-lg" disabled>
-                  未通过
-                </button>
-                <button class="btn btn-primary btn-lg" @click="showSignupDialog = true">
-                  重新报名
-                </button>
-              </template>
-              <template v-else-if="project.signup_status === 'cancelled'">
-                <button class="btn btn-secondary btn-lg" disabled>
-                  已取消
-                </button>
-                <button class="btn btn-primary btn-lg" @click="showSignupDialog = true">
-                  重新报名
-                </button>
-              </template>
+            <template v-if="project.signup_status === 'pending'">
+              <button class="btn btn-warning btn-lg" disabled>
+                审核中
+              </button>
+              <button class="btn btn-outline btn-lg" @click="handleCancel">
+                取消报名
+              </button>
+            </template>
+            <template v-else-if="project.signup_status === 'approved'">
+              <button class="btn btn-success btn-lg" disabled>
+                ✓ 已通过
+              </button>
+            </template>
+            <template v-else-if="project.signup_status === 'rejected'">
+              <button class="btn btn-danger btn-lg" disabled>
+                未通过
+              </button>
+              <button class="btn btn-primary btn-lg" @click="showSignupDialog = true">
+                重新报名
+              </button>
+            </template>
+            <template v-else-if="project.signup_status === 'cancelled'">
+              <button class="btn btn-secondary btn-lg" disabled>
+                已取消
+              </button>
+              <button class="btn btn-primary btn-lg" @click="showSignupDialog = true">
+                重新报名
+              </button>
             </template>
             <template v-else-if="project.status !== 'recruiting'">
               <button class="btn btn-secondary btn-lg" disabled>
@@ -245,7 +243,7 @@
           <div class="form-group">
             <label>报名理由 <span class="required">*</span></label>
             <textarea
-              v-model="signupForm.apply_reason"
+              v-model="signupForm.signup_reason"
               rows="3"
               placeholder="请简要说明您的报名理由..."
               class="form-textarea"
@@ -295,7 +293,7 @@ const loading = ref(false)
 const signingUp = ref(false)
 const showSignupDialog = ref(false)
 const signupForm = ref({
-  apply_reason: '',
+  signup_reason: '',
   skills: ''
 })
 
@@ -374,7 +372,7 @@ const loadMyRecords = async () => {
 
 const handleSignup = async () => {
   if (!project.value) return
-  if (!signupForm.value.apply_reason.trim()) {
+  if (!signupForm.value.signup_reason.trim()) {
     alert('请填写报名理由')
     return
   }
@@ -382,11 +380,13 @@ const handleSignup = async () => {
   signingUp.value = true
   try {
     await signupVolunteerProject(project.value.id, {
-      apply_reason: signupForm.value.apply_reason,
+      signup_reason: signupForm.value.signup_reason,
       skills: signupForm.value.skills
     })
     alert('报名成功，等待审核！')
     showSignupDialog.value = false
+    signupForm.value.signup_reason = ''
+    signupForm.value.skills = ''
     loadProject()
   } catch (error: any) {
     alert(error.message || '报名失败')

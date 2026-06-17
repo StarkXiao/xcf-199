@@ -186,7 +186,9 @@ router.get('/:id', optionalAuthMiddleware, async (req, res) => {
         'SELECT * FROM volunteer_signups WHERE user_id = ? AND project_id = ? LIMIT 1',
         [req.user.id, projectId]
       );
-      result.is_signed_up = signup ? true : false;
+      
+      const activeStatuses = ['pending', 'approved'];
+      result.is_signed_up = signup && activeStatuses.includes(signup.status) ? true : false;
       result.signup_status = signup ? signup.status : null;
       result.signup_id = signup ? signup.id : null;
 
@@ -248,7 +250,7 @@ router.post('/:id/signup', authMiddleware, async (req, res) => {
       [userId, projectId]
     );
 
-    if (existingSignup && existingSignup.status !== 'rejected') {
+    if (existingSignup && !['rejected', 'cancelled'].includes(existingSignup.status)) {
       return res.status(400).json({ code: 400, message: '已报名该项目' });
     }
 

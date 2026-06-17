@@ -219,8 +219,10 @@ export interface VolunteerSignup {
   user_id: number
   project_id: number
   status: string
-  apply_reason: string
+  signup_reason: string
   skills: string
+  service_hours?: number
+  points_awarded?: number
   reviewed_by?: number
   review_opinion?: string
   reviewed_at?: string

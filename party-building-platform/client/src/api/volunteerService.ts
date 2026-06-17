@@ -30,7 +30,7 @@ export const getVolunteerProjectDetail = (id: number) => {
   return request.get<any, ApiResponse<VolunteerProject>>(`/volunteer-service/${id}`)
 }
 
-export const signupVolunteerProject = (id: number, data: { apply_reason?: string; skills?: string }) => {
+export const signupVolunteerProject = (id: number, data: { signup_reason?: string; skills?: string }) => {
   return request.post<any, ApiResponse<null>>(`/volunteer-service/${id}/signup`, data)
 }
 

@@ -97,6 +97,12 @@ const router = createRouter({
           name: 'branch-meeting-detail',
           component: () => import('@/views/BranchMeetingDetail.vue'),
           meta: { title: '会议详情' }
+        },
+        {
+          path: 'learning-map',
+          name: 'learning-map',
+          component: () => import('@/views/LearningMap.vue'),
+          meta: { title: '学习地图' }
         }
       ]
     },

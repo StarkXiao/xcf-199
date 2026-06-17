@@ -394,3 +394,126 @@ export interface BranchMeetingStats {
   passed_resolutions: number
 }
 
+export type LearningDifficulty = 'beginner' | 'intermediate' | 'advanced'
+
+export type LearningStageStatus = 'locked' | 'available' | 'in_progress' | 'completed'
+
+export type LearningLevelStatus = 'locked' | 'current' | 'completed'
+
+export interface LearningTopic {
+  id: number
+  name: string
+  description: string
+  icon: string
+  color: string
+  total_levels: number
+  total_lessons: number
+  progress: number
+  sort_order: number
+}
+
+export interface LearningLevel {
+  id: number
+  topic_id: number
+  name: string
+  description: string
+  level_number: number
+  difficulty: LearningDifficulty
+  status: LearningLevelStatus
+  required_points: number
+  total_lessons: number
+  completed_lessons: number
+  icon: string
+}
+
+export interface LearningLesson {
+  id: number
+  level_id: number
+  topic_id: number
+  title: string
+  description: string
+  content: string
+  duration: number
+  points_reward: number
+  sort_order: number
+  status: LearningStageStatus
+  article_id?: number
+  quiz_id?: number
+}
+
+export interface LearningProgress {
+  user_id: number
+  topic_id: number
+  level_id: number
+  lesson_id: number
+  status: LearningStageStatus
+  started_at?: string
+  completed_at?: string
+  duration_spent: number
+  score?: number
+}
+
+export interface LearningTopicProgress {
+  topic_id: number
+  topic_name: string
+  total_levels: number
+  completed_levels: number
+  total_lessons: number
+  completed_lessons: number
+  progress_percent: number
+  total_points: number
+  earned_points: number
+  levels: LearningLevelProgress[]
+}
+
+export interface LearningLevelProgress {
+  level_id: number
+  level_name: string
+  level_number: number
+  difficulty: LearningDifficulty
+  status: LearningLevelStatus
+  total_lessons: number
+  completed_lessons: number
+  progress_percent: number
+  lessons: LearningLessonProgress[]
+}
+
+export interface LearningLessonProgress {
+  lesson_id: number
+  title: string
+  status: LearningStageStatus
+  completed_at?: string
+  score?: number
+  points_earned: number
+}
+
+export interface LearningStageResult {
+  type: 'level' | 'topic'
+  id: number
+  name: string
+  completed: boolean
+  total_lessons: number
+  completed_lessons: number
+  total_points: number
+  earned_points: number
+  avg_score?: number
+  completed_at: string
+  next_stage_name?: string
+}
+
+export interface LearningUserStats {
+  user_id: number
+  total_topics: number
+  completed_topics: number
+  total_levels: number
+  completed_levels: number
+  total_lessons: number
+  completed_lessons: number
+  total_points: number
+  earned_points: number
+  current_streak: number
+  longest_streak: number
+  total_study_minutes: number
+  last_study_date?: string
+}
+

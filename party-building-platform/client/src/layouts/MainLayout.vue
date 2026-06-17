@@ -8,6 +8,7 @@
         </div>
         <nav class="nav">
           <router-link to="/" class="nav-link" :class="{ active: $route.name === 'home' }">首页</router-link>
+          <router-link to="/learning-map" class="nav-link" :class="{ active: $route.name === 'learning-map' }">学习地图</router-link>
           <router-link to="/articles" class="nav-link" :class="{ active: $route.name === 'articles' || $route.name === 'article-detail' }">学习专栏</router-link>
           <router-link to="/activities" class="nav-link" :class="{ active: $route.name === 'activities' || $route.name === 'activity-detail' }">活动报名</router-link>
           <router-link to="/points" class="nav-link" :class="{ active: $route.name === 'points' }">积分排行</router-link>

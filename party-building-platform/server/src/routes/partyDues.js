@@ -140,6 +140,48 @@ router.delete('/rules/:id', authMiddleware, async (req, res) => {
   }
 });
 
+router.put('/rules/:id/toggle', authMiddleware, async (req, res) => {
+  try {
+    if (req.user.role !== 'admin') {
+      return res.status(403).json({ code: 403, message: '无权限操作' });
+    }
+    const { id } = req.params;
+    const rule = await db.getOne(
+      'party_dues_rules',
+      r => r.id === parseInt(id),
+      'SELECT * FROM party_dues_rules WHERE id = ?',
+      [id]
+    );
+    if (!rule) {
+      return res.status(404).json({ code: 404, message: '规则不存在' });
+    }
+    const newStatus = rule.status === 'active' ? 'inactive' : 'active';
+    const now = new Date().toISOString();
+    if (db.useMySQL) {
+      await db.exec(
+        'UPDATE party_dues_rules SET status = ?, updated_at = ? WHERE id = ?',
+        [newStatus, now, id]
+      );
+    } else {
+      await db.update(
+        'party_dues_rules',
+        r => r.id === parseInt(id),
+        { status: newStatus, updated_at: now }
+      );
+    }
+    const updatedRule = await db.getOne(
+      'party_dues_rules',
+      r => r.id === parseInt(id),
+      'SELECT * FROM party_dues_rules WHERE id = ?',
+      [id]
+    );
+    res.json({ code: 200, message: '操作成功', data: updatedRule });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ code: 500, message: '服务器内部错误', error: err.message });
+  }
+});
+
 router.get('/my/bills', authMiddleware, async (req, res) => {
   try {
     const page = parseInt(req.query.page) || 1;
@@ -398,7 +440,14 @@ router.post('/my/remediation', authMiddleware, async (req, res) => {
     );
 
     const income = userConfig?.monthly_income || 0;
-    const { amount: monthlyAmount } = calculateDuesAmount(income, rules);
+    let monthlyAmount = 0;
+
+    if (userConfig?.custom_dues_amount && userConfig?.dues_type === 'fixed') {
+      monthlyAmount = userConfig.custom_dues_amount;
+    } else {
+      const result = calculateDuesAmount(income, rules);
+      monthlyAmount = result.amount;
+    }
 
     let totalMonths = 0;
     for (let y = start_year; y <= end_year; y++) {
@@ -581,7 +630,16 @@ router.post('/admin/bills/generate', authMiddleware, async (req, res) => {
       if (userConfig?.is_exempt) continue;
 
       const income = userConfig?.monthly_income || 0;
-      const { amount: duesAmount, ruleId } = calculateDuesAmount(income, activeRules);
+      let duesAmount = 0;
+      let ruleId = null;
+
+      if (userConfig?.custom_dues_amount && userConfig?.dues_type === 'fixed') {
+        duesAmount = userConfig.custom_dues_amount;
+      } else {
+        const result = calculateDuesAmount(income, activeRules);
+        duesAmount = result.amount;
+        ruleId = result.ruleId;
+      }
 
       if (duesAmount <= 0) continue;
 
@@ -610,6 +668,186 @@ router.post('/admin/bills/generate', authMiddleware, async (req, res) => {
     });
 
     res.json({ code: 200, message: '生成成功', data: { generated_count: generatedCount } });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ code: 500, message: '服务器内部错误', error: err.message });
+  }
+});
+
+router.put('/admin/bills/:id/mark-paid', authMiddleware, async (req, res) => {
+  try {
+    if (req.user.role !== 'admin') {
+      return res.status(403).json({ code: 403, message: '无权限操作' });
+    }
+    const { id } = req.params;
+    const { payment_method, payment_reference, payment_date } = req.body;
+
+    const bill = await db.getOne(
+      'party_dues_bills',
+      b => b.id === parseInt(id),
+      'SELECT * FROM party_dues_bills WHERE id = ?',
+      [id]
+    );
+    if (!bill) {
+      return res.status(404).json({ code: 404, message: '账单不存在' });
+    }
+    if (bill.status === 'paid') {
+      return res.status(400).json({ code: 400, message: '账单已缴纳' });
+    }
+
+    const now = new Date().toISOString();
+    const payDate = payment_date || now.slice(0, 10);
+    const payMethod = payment_method || 'cash';
+    const payRef = payment_reference || '管理员手动标记';
+
+    if (db.useMySQL) {
+      await db.exec(
+        'UPDATE party_dues_bills SET status = ?, paid_amount = total_amount, paid_at = ?, payment_method = ?, payment_reference = ?, updated_at = ? WHERE id = ?',
+        ['paid', now, payMethod, payRef, now, id]
+      );
+    } else {
+      await db.update(
+        'party_dues_bills',
+        b => b.id === parseInt(id),
+        { status: 'paid', paid_amount: bill.total_amount, paid_at: now, payment_method: payMethod, payment_reference: payRef, updated_at: now }
+      );
+    }
+
+    await db.insert('party_dues_payments', {
+      user_id: bill.user_id,
+      bill_id: bill.id,
+      payment_date: payDate,
+      payment_amount: bill.total_amount,
+      payment_method: payMethod,
+      payment_reference: payRef,
+      bill_year: bill.bill_year,
+      bill_month: bill.bill_month,
+      late_fee: bill.late_fee || 0,
+      payer_name: '',
+      recorded_by: req.user.id,
+      status: 'confirmed'
+    });
+
+    await db.insert('party_dues_history', {
+      bill_id: bill.id,
+      action_type: 'admin_mark_paid',
+      action_detail: `管理员标记${bill.bill_year}年${bill.bill_month}月账单已缴纳，金额：${bill.total_amount}元`,
+      operator_id: req.user.id,
+      operator_name: req.user.real_name
+    });
+
+    res.json({ code: 200, message: '标记成功' });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ code: 500, message: '服务器内部错误', error: err.message });
+  }
+});
+
+router.get('/admin/bills/stats', authMiddleware, async (req, res) => {
+  try {
+    if (req.user.role !== 'admin') {
+      return res.status(403).json({ code: 403, message: '无权限操作' });
+    }
+    const year = req.query.year || new Date().getFullYear();
+
+    let bills;
+    if (db.useMySQL) {
+      bills = await db.exec('SELECT * FROM party_dues_bills WHERE bill_year = ?', [year]);
+    } else {
+      bills = await db.findMany('party_dues_bills', b => b.bill_year === parseInt(year));
+    }
+
+    const totalBills = bills.length;
+    const paidBills = bills.filter(b => b.status === 'paid').length;
+    const unpaidBills = bills.filter(b => b.status === 'unpaid').length;
+    const overdueBills = bills.filter(b => b.status === 'overdue').length;
+    const totalAmount = bills.reduce((sum, b) => sum + b.total_amount, 0);
+    const paidAmount = bills.filter(b => b.status === 'paid').reduce((sum, b) => sum + b.total_amount, 0);
+    const unpaidAmount = bills.filter(b => b.status !== 'paid').reduce((sum, b) => sum + b.total_amount, 0);
+
+    res.json({
+      code: 200,
+      message: '获取成功',
+      data: {
+        total_bills: totalBills,
+        paid_bills: paidBills,
+        unpaid_bills: unpaidBills,
+        overdue_bills: overdueBills,
+        total_amount: totalAmount,
+        paid_amount: paidAmount,
+        unpaid_amount: unpaidAmount
+      }
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ code: 500, message: '服务器内部错误', error: err.message });
+  }
+});
+
+router.get('/admin/bills/unpaid', authMiddleware, async (req, res) => {
+  try {
+    if (req.user.role !== 'admin') {
+      return res.status(403).json({ code: 403, message: '无权限操作' });
+    }
+    const year = req.query.year;
+    const month = req.query.month;
+    const branch = req.query.branch;
+
+    let sql = `
+      SELECT b.*, u.real_name, u.branch, u.phone
+      FROM party_dues_bills b
+      LEFT JOIN users u ON b.user_id = u.id
+      WHERE b.status != 'paid'
+    `;
+    const params = [];
+
+    if (year) {
+      sql += ' AND b.bill_year = ?';
+      params.push(year);
+    }
+    if (month) {
+      sql += ' AND b.bill_month = ?';
+      params.push(month);
+    }
+    if (branch) {
+      sql += ' AND u.branch = ?';
+      params.push(branch);
+    }
+
+    sql += ' ORDER BY b.bill_year DESC, b.bill_month DESC, u.branch, u.real_name';
+
+    let unpaidBills;
+    if (db.useMySQL) {
+      unpaidBills = await db.exec(sql, params);
+    } else {
+      const allBills = await db.getAll('party_dues_bills');
+      const users = await db.getAll('users');
+      unpaidBills = allBills
+        .filter(b => {
+          if (b.status === 'paid') return false;
+          if (year && b.bill_year !== parseInt(year)) return false;
+          if (month && b.bill_month !== parseInt(month)) return false;
+          const user = users.find(u => u.id === b.user_id);
+          if (branch && user?.branch !== branch) return false;
+          return true;
+        })
+        .map(b => {
+          const user = users.find(u => u.id === b.user_id);
+          return {
+            ...b,
+            real_name: user?.real_name,
+            branch: user?.branch,
+            phone: user?.phone
+          };
+        })
+        .sort((a, b) => {
+          if (a.bill_year !== b.bill_year) return b.bill_year - a.bill_year;
+          if (a.bill_month !== b.bill_month) return b.bill_month - a.bill_month;
+          return (a.branch || '').localeCompare(b.branch || '');
+        });
+    }
+
+    res.json({ code: 200, message: '获取成功', data: unpaidBills });
   } catch (err) {
     console.error(err);
     res.status(500).json({ code: 500, message: '服务器内部错误', error: err.message });
@@ -869,6 +1107,87 @@ router.put('/admin/remediations/:id/approve', authMiddleware, async (req, res) =
     });
 
     res.json({ code: 200, message: '审批通过' });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ code: 500, message: '服务器内部错误', error: err.message });
+  }
+});
+
+router.put('/admin/remediations/:id/reject', authMiddleware, async (req, res) => {
+  try {
+    if (req.user.role !== 'admin') {
+      return res.status(403).json({ code: 403, message: '无权限操作' });
+    }
+    const { id } = req.params;
+    const { reject_reason } = req.body;
+
+    if (!reject_reason) {
+      return res.status(400).json({ code: 400, message: '请填写拒绝原因' });
+    }
+
+    const remediation = await db.getOne(
+      'party_dues_remediation',
+      r => r.id === parseInt(id),
+      'SELECT * FROM party_dues_remediation WHERE id = ?',
+      [id]
+    );
+
+    if (!remediation) {
+      return res.status(404).json({ code: 404, message: '补缴申请不存在' });
+    }
+
+    const now = new Date().toISOString();
+    if (db.useMySQL) {
+      await db.exec(
+        'UPDATE party_dues_remediation SET status = ?, reject_reason = ?, approved_by = ?, approved_at = ?, updated_at = ? WHERE id = ?',
+        ['rejected', reject_reason, req.user.id, now, now, id]
+      );
+    } else {
+      await db.update(
+        'party_dues_remediation',
+        r => r.id === parseInt(id),
+        { status: 'rejected', reject_reason, approved_by: req.user.id, approved_at: now, updated_at: now }
+      );
+    }
+
+    await db.insert('party_dues_history', {
+      remediation_id: parseInt(id),
+      action_type: 'reject_remediation',
+      action_detail: `管理员拒绝补缴申请，原因：${reject_reason}`,
+      operator_id: req.user.id,
+      operator_name: req.user.real_name
+    });
+
+    res.json({ code: 200, message: '已拒绝' });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ code: 500, message: '服务器内部错误', error: err.message });
+  }
+});
+
+router.get('/admin/remediations/stats', authMiddleware, async (req, res) => {
+  try {
+    if (req.user.role !== 'admin') {
+      return res.status(403).json({ code: 403, message: '无权限操作' });
+    }
+
+    let remediations;
+    if (db.useMySQL) {
+      remediations = await db.exec('SELECT status FROM party_dues_remediation');
+    } else {
+      remediations = await db.getAll('party_dues_remediation');
+    }
+
+    const pending = remediations.filter(r => r.status === 'pending').length;
+    const approved = remediations.filter(r => r.status === 'approved').length;
+    const rejected = remediations.filter(r => r.status === 'rejected').length;
+    const paid = remediations.filter(r => r.status === 'paid').length;
+
+    res.json({
+      code: 200,
+      message: '获取成功',
+      data: { pending, approved, rejected, paid }
+    });
   } catch (err) {
     console.error(err);
     res.status(500).json({ code: 500, message: '服务器内部错误', error: err.message });
@@ -1150,33 +1469,126 @@ router.get('/admin/user-configs', authMiddleware, async (req, res) => {
     if (req.user.role !== 'admin') {
       return res.status(403).json({ code: 403, message: '无权限操作' });
     }
+    const page = parseInt(req.query.page) || 1;
+    const pageSize = parseInt(req.query.page_size) || config.pageSize;
+    const keyword = req.query.keyword;
+
     let sql = `
-      SELECT c.*, u.real_name, u.branch, u.phone 
+      SELECT c.*, u.real_name, u.branch, u.phone, u.avatar
       FROM party_dues_user_config c
       LEFT JOIN users u ON c.user_id = u.id
-      ORDER BY u.branch, u.real_name
+      WHERE 1=1
     `;
-    let configs;
+    const params = [];
+    let countSql = `
+      SELECT COUNT(*) as c
+      FROM party_dues_user_config c
+      LEFT JOIN users u ON c.user_id = u.id
+      WHERE 1=1
+    `;
+    const countParams = [];
+
+    if (keyword) {
+      sql += ' AND (u.real_name LIKE ? OR u.phone LIKE ? OR u.branch LIKE ?)';
+      countSql += ' AND (u.real_name LIKE ? OR u.phone LIKE ? OR u.branch LIKE ?)';
+      const kw = `%${keyword}%`;
+      params.push(kw, kw, kw);
+      countParams.push(kw, kw, kw);
+    }
+
+    sql += ' ORDER BY u.branch, u.real_name';
+
+    const predicate = (c) => {
+      if (!keyword) return true;
+      const kw = keyword.toLowerCase();
+      return (
+        (c.real_name && c.real_name.toLowerCase().includes(kw)) ||
+        (c.phone && c.phone.toLowerCase().includes(kw)) ||
+        (c.branch && c.branch.toLowerCase().includes(kw))
+      );
+    };
+
+    const result = await db.paginate('party_dues_user_config', {
+      page,
+      page_size: pageSize,
+      predicate,
+      sortBy: 'user_id',
+      sortOrder: 'asc',
+      sql,
+      sqlParams: params,
+      countSql,
+      countParams
+    });
+
+    let list;
     if (db.useMySQL) {
-      configs = await db.exec(sql);
+      list = result.list;
     } else {
-      const allConfigs = await db.getAll('party_dues_user_config');
       const users = await db.getAll('users');
-      configs = allConfigs.map(c => {
+      list = result.list.map(c => {
         const user = users.find(u => u.id === c.user_id);
         return {
           ...c,
           real_name: user?.real_name,
           branch: user?.branch,
-          phone: user?.phone
+          phone: user?.phone,
+          avatar: user?.avatar
         };
       });
-      configs.sort((a, b) => {
+      list.sort((a, b) => {
         if (a.branch !== b.branch) return (a.branch || '').localeCompare(b.branch || '');
         return (a.real_name || '').localeCompare(b.real_name || '');
       });
     }
-    res.json({ code: 200, message: '获取成功', data: configs });
+
+    res.json({
+      code: 200,
+      message: '获取成功',
+      data: { list, total: result.total, page, page_size: pageSize }
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ code: 500, message: '服务器内部错误', error: err.message });
+  }
+});
+
+router.delete('/admin/user-configs/:user_id', authMiddleware, async (req, res) => {
+  try {
+    if (req.user.role !== 'admin') {
+      return res.status(403).json({ code: 403, message: '无权限操作' });
+    }
+    const { user_id } = req.params;
+
+    const existing = await db.getOne(
+      'party_dues_user_config',
+      c => c.user_id === parseInt(user_id),
+      'SELECT * FROM party_dues_user_config WHERE user_id = ?',
+      [user_id]
+    );
+
+    if (!existing) {
+      return res.status(404).json({ code: 404, message: '配置不存在' });
+    }
+
+    if (db.useMySQL) {
+      await db.exec('DELETE FROM party_dues_user_config WHERE user_id = ?', [user_id]);
+    } else {
+      await db.delete(
+        'party_dues_user_config',
+        c => c.user_id === parseInt(user_id),
+        'DELETE FROM party_dues_user_config WHERE user_id = ?',
+        [user_id]
+      );
+    }
+
+    await db.insert('party_dues_history', {
+      action_type: 'delete_user_config',
+      action_detail: `删除用户 ${user_id} 的党费特殊配置`,
+      operator_id: req.user.id,
+      operator_name: req.user.real_name
+    });
+
+    res.json({ code: 200, message: '删除成功' });
   } catch (err) {
     console.error(err);
     res.status(500).json({ code: 500, message: '服务器内部错误', error: err.message });

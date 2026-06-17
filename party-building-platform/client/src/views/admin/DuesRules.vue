@@ -399,7 +399,7 @@ const handleEditUser = (config: PartyDuesUserConfig) => {
 const handleDeleteUser = async (config: PartyDuesUserConfig) => {
   if (!confirm('确定要删除此配置吗？')) return
   try {
-    await deleteDuesUserConfig(config.id)
+    await deleteDuesUserConfig(config.user_id)
     alert('删除成功')
     loadUserConfigs()
   } catch (error: any) {
@@ -428,21 +428,17 @@ const submitUserConfig = async () => {
   submitting.value = true
   try {
     const data = {
-      ...userConfigForm.value,
-      user_id: userConfigForm.value.user_id || undefined,
-      custom_dues_amount: userConfigForm.value.fixed_amount,
-      monthly_income: userConfigForm.value.monthly_income || undefined,
-      fixed_amount: userConfigForm.value.fixed_amount || undefined,
-      is_active: userConfigForm.value.is_active ? 1 : 0
+      user_id: userConfigForm.value.user_id,
+      monthly_income: userConfigForm.value.monthly_income || 0,
+      custom_dues_amount: userConfigForm.value.fixed_amount || null,
+      is_exempt: userConfigForm.value.is_active ? 0 : 1,
+      dues_type: userConfigForm.value.fixed_amount ? 'fixed' : 'regular',
+      effective_date: new Date().toISOString().slice(0, 10)
     } as any
     
-    if (showEditUserModal.value && editingUserConfig.value) {
-      await updateDuesUserConfig(editingUserConfig.value.id, data)
-      alert('更新成功')
-    } else {
-      await createDuesUserConfig(data)
-      alert('添加成功')
-    }
+    const userId = userConfigForm.value.user_id!
+    await updateDuesUserConfig(userId, data)
+    alert('保存成功')
     closeUserModal()
     loadUserConfigs()
   } catch (error: any) {

@@ -18,6 +18,7 @@
           <router-link to="/democratic-review" class="nav-link" :class="{ active: $route.name === 'democratic-review' || $route.name === 'democratic-review-detail' }">民主评议</router-link>
           <router-link v-if="userStore.isLoggedIn" to="/party-development" class="nav-link" :class="{ active: $route.name === 'party-development' }">党员发展</router-link>
           <router-link v-if="userStore.isLoggedIn" to="/party-transfer" class="nav-link" :class="{ active: $route.name === 'party-transfer' }">组织转接</router-link>
+          <router-link v-if="userStore.isLoggedIn" to="/party-dues" class="nav-link" :class="{ active: $route.name === 'party-dues' || $route.name === 'party-dues-payments' }">党费缴纳</router-link>
         </nav>
         <div class="header-right">
           <template v-if="userStore.isLoggedIn">

@@ -1067,6 +1067,252 @@ function initDatabase() {
     insertReviewHistory.run(h.id, h.reviewId, h.actionType, h.detail, h.opId, h.opName);
   });
 
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS party_dues_rules (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      rule_name TEXT NOT NULL,
+      income_min DECIMAL(10,2) DEFAULT 0,
+      income_max DECIMAL(10,2),
+      dues_rate DECIMAL(5,4) NOT NULL,
+      fixed_amount DECIMAL(10,2),
+      calculation_method TEXT DEFAULT 'percentage',
+      effective_date DATE NOT NULL,
+      expiry_date DATE,
+      status TEXT DEFAULT 'active',
+      description TEXT,
+      created_by INTEGER,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS party_dues_bills (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL,
+      bill_year INTEGER NOT NULL,
+      bill_month INTEGER NOT NULL,
+      base_amount DECIMAL(10,2) NOT NULL,
+      dues_amount DECIMAL(10,2) NOT NULL,
+      late_fee DECIMAL(10,2) DEFAULT 0,
+      total_amount DECIMAL(10,2) NOT NULL,
+      status TEXT DEFAULT 'unpaid',
+      payment_deadline DATE,
+      paid_amount DECIMAL(10,2) DEFAULT 0,
+      paid_at DATETIME,
+      payment_method TEXT,
+      payment_reference TEXT,
+      rule_id INTEGER,
+      is_remediation INTEGER DEFAULT 0,
+      remediation_reason TEXT,
+      generated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+      FOREIGN KEY (rule_id) REFERENCES party_dues_rules(id) ON DELETE SET NULL,
+      UNIQUE(user_id, bill_year, bill_month)
+    );
+
+    CREATE TABLE IF NOT EXISTS party_dues_payments (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL,
+      bill_id INTEGER,
+      payment_date DATE NOT NULL,
+      payment_amount DECIMAL(10,2) NOT NULL,
+      payment_method TEXT NOT NULL,
+      payment_reference TEXT,
+      bill_year INTEGER,
+      bill_month INTEGER,
+      is_remediation INTEGER DEFAULT 0,
+      remediation_months TEXT,
+      late_fee DECIMAL(10,2) DEFAULT 0,
+      payer_name TEXT,
+      recorded_by INTEGER,
+      verified_by INTEGER,
+      verified_at DATETIME,
+      status TEXT DEFAULT 'confirmed',
+      remark TEXT,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+      FOREIGN KEY (bill_id) REFERENCES party_dues_bills(id) ON DELETE SET NULL,
+      FOREIGN KEY (recorded_by) REFERENCES users(id) ON DELETE SET NULL,
+      FOREIGN KEY (verified_by) REFERENCES users(id) ON DELETE SET NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS party_dues_remediation (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL,
+      start_year INTEGER NOT NULL,
+      start_month INTEGER NOT NULL,
+      end_year INTEGER NOT NULL,
+      end_month INTEGER NOT NULL,
+      total_months INTEGER NOT NULL,
+      base_total DECIMAL(10,2) NOT NULL,
+      late_fee DECIMAL(10,2) DEFAULT 0,
+      total_amount DECIMAL(10,2) NOT NULL,
+      reason TEXT NOT NULL,
+      payment_id INTEGER,
+      status TEXT DEFAULT 'pending',
+      approved_by INTEGER,
+      approved_at DATETIME,
+      created_by INTEGER,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+      FOREIGN KEY (payment_id) REFERENCES party_dues_payments(id) ON DELETE SET NULL,
+      FOREIGN KEY (approved_by) REFERENCES users(id) ON DELETE SET NULL,
+      FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS party_dues_user_config (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL UNIQUE,
+      monthly_income DECIMAL(10,2) DEFAULT 0,
+      custom_dues_amount DECIMAL(10,2),
+      dues_type TEXT DEFAULT 'regular',
+      exemption_reason TEXT,
+      is_exempt INTEGER DEFAULT 0,
+      effective_date DATE,
+      created_by INTEGER,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+      FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS party_dues_history (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      bill_id INTEGER,
+      payment_id INTEGER,
+      remediation_id INTEGER,
+      action_type TEXT NOT NULL,
+      action_detail TEXT,
+      operator_id INTEGER,
+      operator_name TEXT,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (bill_id) REFERENCES party_dues_bills(id) ON DELETE SET NULL,
+      FOREIGN KEY (payment_id) REFERENCES party_dues_payments(id) ON DELETE SET NULL,
+      FOREIGN KEY (remediation_id) REFERENCES party_dues_remediation(id) ON DELETE SET NULL,
+      FOREIGN KEY (operator_id) REFERENCES users(id) ON DELETE SET NULL
+    );
+  `);
+
+  const insertDuesRule = db.prepare(`
+    INSERT OR IGNORE INTO party_dues_rules (id, rule_name, income_min, income_max, dues_rate, fixed_amount, calculation_method, effective_date, status, description)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `);
+
+  const duesRules = [
+    { id: 1, name: '月收入3000元及以下', min: 0, max: 3000, rate: 0.005, fixed: null, method: 'percentage', effective: '2024-01-01', status: 'active', desc: '按月收入的0.5%交纳' },
+    { id: 2, name: '月收入3000-5000元', min: 3000.01, max: 5000, rate: 0.01, fixed: null, method: 'percentage', effective: '2024-01-01', status: 'active', desc: '按月收入的1%交纳' },
+    { id: 3, name: '月收入5000-10000元', min: 5000.01, max: 10000, rate: 0.015, fixed: null, method: 'percentage', effective: '2024-01-01', status: 'active', desc: '按月收入的1.5%交纳' },
+    { id: 4, name: '月收入10000元以上', min: 10000.01, max: null, rate: 0.02, fixed: null, method: 'percentage', effective: '2024-01-01', status: 'active', desc: '按月收入的2%交纳' },
+    { id: 5, name: '离退休党员', min: 0, max: null, rate: 0.005, fixed: 10, method: 'fixed', effective: '2024-01-01', status: 'active', desc: '每月固定交纳10元' },
+    { id: 6, name: '学生党员', min: 0, max: null, rate: 0, fixed: 0.2, method: 'fixed', effective: '2024-01-01', status: 'active', desc: '每月交纳0.2元' }
+  ];
+
+  duesRules.forEach(rule => {
+    insertDuesRule.run(rule.id, rule.name, rule.min, rule.max, rule.rate, rule.fixed, rule.method, rule.effective, rule.status, rule.desc);
+  });
+
+  const insertUserConfig = db.prepare(`
+    INSERT OR IGNORE INTO party_dues_user_config (user_id, monthly_income, dues_type, effective_date)
+    VALUES (?, ?, ?, ?)
+  `);
+
+  insertUserConfig.run(2, 8000, 'regular', '2024-01-01');
+  insertUserConfig.run(3, 5500, 'regular', '2024-01-01');
+  insertUserConfig.run(4, 12000, 'regular', '2024-01-01');
+  insertUserConfig.run(5, 3500, 'regular', '2024-01-01');
+
+  const insertDuesBill = db.prepare(`
+    INSERT OR IGNORE INTO party_dues_bills (id, user_id, bill_year, bill_month, base_amount, dues_amount, late_fee, total_amount, status, payment_deadline, rule_id)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `);
+
+  const getDuesAmount = (income) => {
+    if (income <= 3000) return income * 0.005;
+    if (income <= 5000) return income * 0.01;
+    if (income <= 10000) return income * 0.015;
+    return income * 0.02;
+  };
+
+  const currentDate = new Date();
+  const duesBills = [];
+  let billId = 1;
+  const incomes = { 2: 8000, 3: 5500, 4: 12000, 5: 3500 };
+
+  for (let userId = 2; userId <= 5; userId++) {
+    const income = incomes[userId];
+    const duesAmount = getDuesAmount(income);
+    const ruleIds = { 2: 3, 3: 3, 4: 4, 5: 2 };
+
+    for (let month = 1; month <= currentDate.getMonth() + 1; month++) {
+      const isPaid = month <= currentDate.getMonth() - 1 || (userId !== 5 && month !== currentDate.getMonth());
+      const deadline = new Date(currentDate.getFullYear(), month, 25);
+      const status = isPaid ? 'paid' : (month <= currentDate.getMonth() ? 'overdue' : 'unpaid');
+      
+      duesBills.push({
+        id: billId++,
+        userId,
+        year: currentDate.getFullYear(),
+        month,
+        base: income,
+        dues: duesAmount,
+        lateFee: status === 'overdue' ? duesAmount * 0.01 : 0,
+        total: isPaid ? duesAmount : (status === 'overdue' ? duesAmount * 1.01 : duesAmount),
+        status,
+        deadline: deadline.toISOString().slice(0, 10),
+        ruleId: ruleIds[userId]
+      });
+    }
+  }
+
+  duesBills.forEach(bill => {
+    insertDuesBill.run(bill.id, bill.userId, bill.year, bill.month, bill.base, bill.dues, bill.lateFee, bill.total, bill.status, bill.deadline, bill.ruleId);
+  });
+
+  const insertDuesPayment = db.prepare(`
+    INSERT OR IGNORE INTO party_dues_payments (id, user_id, bill_id, payment_date, payment_amount, payment_method, bill_year, bill_month, late_fee, payer_name, recorded_by, status)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `);
+
+  let paymentId = 1;
+  const userNames = { 2: '张三', 3: '李四', 4: '王五', 5: '赵六' };
+  const paymentMethods = ['bank_transfer', 'alipay', 'wechat', 'cash'];
+
+  duesBills.filter(b => b.status === 'paid').forEach(bill => {
+    const payDate = new Date(bill.year, bill.month - 1, Math.floor(Math.random() * 10) + 10);
+    insertDuesPayment.run(
+      paymentId++,
+      bill.userId,
+      bill.id,
+      payDate.toISOString().slice(0, 10),
+      bill.dues,
+      paymentMethods[Math.floor(Math.random() * paymentMethods.length)],
+      bill.year,
+      bill.month,
+      0,
+      userNames[bill.userId],
+      1,
+      'confirmed'
+    );
+  });
+
+  const insertRemediation = db.prepare(`
+    INSERT OR IGNORE INTO party_dues_remediation (id, user_id, start_year, start_month, end_year, end_month, total_months, base_total, late_fee, total_amount, reason, status, created_by)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `);
+
+  insertRemediation.run(1, 5, currentDate.getFullYear(), 1, currentDate.getFullYear(), currentDate.getMonth(), currentDate.getMonth(), incomes[5] * currentDate.getMonth() * 0.01, incomes[5] * currentDate.getMonth() * 0.01 * 0.01, incomes[5] * currentDate.getMonth() * 0.01 * 1.01, '外出学习未能及时交纳', 'pending', 1);
+
+  const insertDuesHistory = db.prepare(`
+    INSERT OR IGNORE INTO party_dues_history (id, bill_id, payment_id, action_type, action_detail, operator_id, operator_name)
+    VALUES (?, ?, ?, ?, ?, ?, ?)
+  `);
+
+  insertDuesHistory.run(1, null, null, 'generate', `系统自动生成${currentDate.getFullYear()}年度党费账单`, 1, '系统管理员');
+
   console.log('数据库初始化完成！');
   console.log('默认账号：admin / admin123 （管理员）');
   console.log('默认账号：zhangsan / user123 （普通用户）');

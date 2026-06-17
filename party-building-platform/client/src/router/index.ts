@@ -121,6 +121,18 @@ const router = createRouter({
           name: 'democratic-review-detail',
           component: () => import('@/views/DemocraticReviewDetail.vue'),
           meta: { title: '评议详情' }
+        },
+        {
+          path: 'party-dues',
+          name: 'party-dues',
+          component: () => import('@/views/PartyDues.vue'),
+          meta: { title: '党费缴纳', requiresAuth: true }
+        },
+        {
+          path: 'party-dues/payments',
+          name: 'party-dues-payments',
+          component: () => import('@/views/PartyDuesPayments.vue'),
+          meta: { title: '缴纳记录', requiresAuth: true }
         }
       ]
     },
@@ -218,6 +230,30 @@ const router = createRouter({
           name: 'admin-democratic-review-stats',
           component: () => import('@/views/admin/DemocraticReviewStats.vue'),
           meta: { title: '管理后台 - 民主评议统计' }
+        },
+        {
+          path: 'dues-rules',
+          name: 'admin-dues-rules',
+          component: () => import('@/views/admin/DuesRules.vue'),
+          meta: { title: '管理后台 - 党费规则配置' }
+        },
+        {
+          path: 'dues-bills',
+          name: 'admin-dues-bills',
+          component: () => import('@/views/admin/DuesBills.vue'),
+          meta: { title: '管理后台 - 党费账单管理' }
+        },
+        {
+          path: 'dues-payments',
+          name: 'admin-dues-payments',
+          component: () => import('@/views/admin/DuesPayments.vue'),
+          meta: { title: '管理后台 - 党费缴纳管理' }
+        },
+        {
+          path: 'dues-stats',
+          name: 'admin-dues-stats',
+          component: () => import('@/views/admin/DuesStats.vue'),
+          meta: { title: '管理后台 - 党费台账统计' }
         }
       ]
     },

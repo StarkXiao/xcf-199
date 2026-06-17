@@ -58,6 +58,23 @@
           <span class="nav-icon">📈</span>
           <span class="nav-text">评议统计</span>
         </router-link>
+        <div class="nav-divider"></div>
+        <router-link to="/admin/dues-rules" class="nav-item" :class="{ active: $route.name === 'admin-dues-rules' }">
+          <span class="nav-icon">⚙️</span>
+          <span class="nav-text">党费规则配置</span>
+        </router-link>
+        <router-link to="/admin/dues-bills" class="nav-item" :class="{ active: $route.name === 'admin-dues-bills' }">
+          <span class="nav-icon">📄</span>
+          <span class="nav-text">党费账单管理</span>
+        </router-link>
+        <router-link to="/admin/dues-payments" class="nav-item" :class="{ active: $route.name === 'admin-dues-payments' }">
+          <span class="nav-icon">💳</span>
+          <span class="nav-text">党费缴纳管理</span>
+        </router-link>
+        <router-link to="/admin/dues-stats" class="nav-item" :class="{ active: $route.name === 'admin-dues-stats' }">
+          <span class="nav-icon">📊</span>
+          <span class="nav-text">党费台账统计</span>
+        </router-link>
       </nav>
       <div class="sidebar-footer">
         <router-link to="/" class="back-link">← 返回前台</router-link>
@@ -159,6 +176,12 @@ const handleLogout = async () => {
 
 .nav-icon {
   font-size: 18px;
+}
+
+.nav-divider {
+  height: 1px;
+  background: rgba(255, 255, 255, 0.1);
+  margin: 8px 12px;
 }
 
 .sidebar-footer {

@@ -713,3 +713,246 @@ export interface PartyTransferStats {
   by_month: { month: string; count: number }[]
 }
 
+export type DuesBillStatus = 'unpaid' | 'paid' | 'overdue' | 'partial' | 'waived'
+
+export type DuesCalculationMethod = 'percentage' | 'fixed'
+
+export type DuesPaymentMethod = 'bank_transfer' | 'alipay' | 'wechat' | 'cash' | 'other'
+
+export type DuesRemediationStatus = 'pending' | 'approved' | 'rejected' | 'paid'
+
+export interface PartyDuesRule {
+  id: number
+  rule_name: string
+  income_min: number
+  income_max: number | null
+  dues_rate: number
+  fixed_amount: number | null
+  calculation_method: DuesCalculationMethod
+  effective_date: string
+  expiry_date: string | null
+  status: string
+  description: string
+  created_by: number
+  created_at: string
+  updated_at: string
+  rate?: number
+  member_type?: string
+  is_active?: number
+}
+
+export interface PartyDuesBill {
+  id: number
+  user_id: number
+  bill_year: number
+  bill_month: number
+  base_amount: number
+  dues_amount: number
+  late_fee: number
+  total_amount: number
+  status: DuesBillStatus
+  status_text?: string
+  payment_deadline: string
+  paid_amount: number
+  paid_at: string | null
+  payment_method: string
+  payment_reference: string
+  rule_id: number | null
+  is_remediation: number
+  remediation_reason: string
+  generated_at: string
+  created_at: string
+  updated_at: string
+  real_name?: string
+  branch?: string
+  phone?: string
+  user?: User
+  rate?: number
+  payments?: PartyDuesPayment[]
+}
+
+export interface PartyDuesPayment {
+  id: number
+  user_id: number
+  bill_id: number | null
+  payment_date: string
+  payment_amount: number
+  payment_method: DuesPaymentMethod
+  payment_method_text?: string
+  payment_reference: string
+  bill_year: number
+  bill_month: number
+  is_remediation: number
+  remediation_months: string
+  late_fee: number
+  payer_name: string
+  recorded_by: number
+  verified_by: number | null
+  verified_at: string | null
+  status: string
+  remark: string
+  created_at: string
+  updated_at: string
+  real_name?: string
+  branch?: string
+  phone?: string
+  avatar?: string
+  user?: User
+  amount?: number
+}
+
+export interface PartyDuesRemediation {
+  id: number
+  user_id: number
+  start_year: number
+  start_month: number
+  end_year: number
+  end_month: number
+  total_months: number
+  base_total: number
+  late_fee: number
+  total_amount: number
+  reason: string
+  payment_id: number | null
+  status: DuesRemediationStatus
+  approved_by: number | null
+  approved_at: string | null
+  created_by: number
+  created_at: string
+  updated_at: string
+  real_name?: string
+  branch?: string
+  phone?: string
+  avatar?: string
+  user?: User
+  months_count?: number
+  reject_reason?: string
+}
+
+export interface PartyDuesUserConfig {
+  id: number
+  user_id: number
+  monthly_income: number
+  custom_dues_amount: number | null
+  dues_type: string
+  exemption_reason: string
+  is_exempt: number
+  effective_date: string
+  created_by: number
+  created_at: string
+  updated_at: string
+  real_name?: string
+  branch?: string
+  phone?: string
+  user?: User
+  fixed_amount?: number
+  is_active?: number
+}
+
+export interface PartyDuesSummary {
+  total_paid: number
+  total_unpaid: number
+  year_paid: number
+  year_unpaid: number
+  overdue_count: number
+  current_year: number
+  latest_bill: PartyDuesBill | null
+  user_config: PartyDuesUserConfig | null
+}
+
+export interface PartyDuesStatsOverview {
+  current_year: number
+  total_bills: number
+  paid_bills: number
+  overdue_bills: number
+  total_dues: number
+  total_paid: number
+  total_late_fee: number
+  payment_count: number
+  payment_total: number
+  party_members: number
+  pending_remediations: number
+  payment_rate: number
+}
+
+export interface PartyDuesUserStats {
+  id: number
+  real_name: string
+  branch: string
+  phone: string
+  avatar: string
+  total_bills: number
+  paid_bills: number
+  overdue_bills: number
+  total_dues: number
+  paid_amount: number
+  late_fee: number
+  payment_rate: number
+  unpaid_amount: number
+}
+
+export interface PartyDuesBranchStats {
+  branch: string
+  member_count: number
+  total_bills: number
+  paid_bills: number
+  overdue_bills: number
+  total_dues: number
+  paid_amount: number
+  late_fee: number
+  payment_rate: number
+  unpaid_amount: number
+}
+
+export interface PartyDuesMonthStats {
+  bill_month: number
+  total_bills: number
+  paid_bills: number
+  overdue_bills: number
+  total_dues: number
+  paid_amount: number
+  late_fee: number
+  payment_rate: number
+  unpaid_amount: number
+}
+
+export interface PartyDuesHistory {
+  id: number
+  bill_id: number | null
+  payment_id: number | null
+  remediation_id: number | null
+  action_type: string
+  action_detail: string
+  operator_id: number | null
+  operator_name: string
+  created_at: string
+}
+
+export interface PartyDuesBillsStats {
+  total_bills: number
+  paid_bills: number
+  unpaid_bills: number
+  overdue_bills: number
+  total_amount: number
+  paid_amount: number
+  unpaid_amount: number
+}
+
+export interface DuesStatsOverview extends PartyDuesStatsOverview {}
+export interface DuesMonthlyStats extends PartyDuesMonthStats {}
+export interface DuesBranchStats extends PartyDuesBranchStats {}
+export interface DuesUserStats extends PartyDuesUserStats {}
+
+export interface DuesUnpaidItem {
+  id: number
+  user_id: number
+  real_name: string
+  branch: string
+  phone: string
+  bill_year: number
+  bill_month: number
+  total_amount: number
+  overdue_days: number
+}
+
+

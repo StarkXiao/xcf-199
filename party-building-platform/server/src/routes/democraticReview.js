@@ -372,6 +372,10 @@ router.post('/:id/organization-review', authMiddleware, async (req, res) => {
       return res.status(404).json({ code: 404, message: '评议不存在' });
     }
 
+    if (review.status !== 'in_progress') {
+      return res.status(400).json({ code: 400, message: '当前评议未在进行中' });
+    }
+
     if (!target_user_id || !scores || !Array.isArray(scores)) {
       return res.status(400).json({ code: 400, message: '参数不完整' });
     }

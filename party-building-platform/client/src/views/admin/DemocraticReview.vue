@@ -51,6 +51,7 @@
             <td>{{ (review as any).creator_name || '-' }}</td>
             <td class="action-cell">
               <button class="btn btn-sm" @click="editReview(review)">编辑</button>
+              <button v-if="review.status === 'in_progress'" class="btn btn-sm btn-info" @click="openOrganizationReview(review)">组织评价</button>
               <button v-if="review.status === 'draft'" class="btn btn-sm btn-primary" @click="changeStatus(review, 'published')">发布</button>
               <button v-if="review.status === 'published'" class="btn btn-sm btn-info" @click="changeStatus(review, 'in_progress')">开始</button>
               <button v-if="review.status === 'in_progress'" class="btn btn-sm btn-success" @click="changeStatus(review, 'completed')">完成</button>
@@ -137,6 +138,98 @@
         </div>
       </div>
     </div>
+
+    <div v-if="showOrgReviewModal" class="modal-overlay" @click.self="closeOrgReviewModal">
+      <div class="modal org-review-modal">
+        <div class="modal-header">
+          <h3>组织评价 - {{ orgReview?.title }}</h3>
+          <button class="modal-close" @click="closeOrgReviewModal">&times;</button>
+        </div>
+        <div class="modal-body">
+          <div v-if="orgReviewLoading" class="loading"><div class="spinner"></div></div>
+          <div v-else class="org-review-content">
+            <div class="org-review-users">
+              <h4 class="section-subtitle">选择评价对象</h4>
+              <div v-if="orgReviewUsers.length === 0" class="empty-inline">暂无参评人员</div>
+              <div v-else class="user-list">
+                <div
+                  v-for="user in orgReviewUsers"
+                  :key="user.user_id"
+                  class="user-item"
+                  :class="{ active: orgReviewTargetId === user.user_id, reviewed: hasOrgReview(user.user_id) }"
+                  @click="selectOrgReviewTarget(user.user_id)"
+                >
+                  <div class="user-info">
+                    <span class="user-name">{{ user.real_name }}</span>
+                    <span class="user-branch">{{ user.branch }}</span>
+                  </div>
+                  <div class="user-scores">
+                    <span class="score-item">互评: {{ user.mutual_avg_score.toFixed(1) }}</span>
+                    <span class="score-item" :class="{ 'has-score': hasOrgReview(user.user_id) }">
+                      组织: {{ hasOrgReview(user.user_id) ? user.organization_score.toFixed(1) : '未评' }}
+                    </span>
+                    <span class="score-item total">综合: {{ user.total_score.toFixed(1) }}</span>
+                  </div>
+                  <span v-if="hasOrgReview(user.user_id)" class="reviewed-badge">✓</span>
+                </div>
+              </div>
+            </div>
+
+            <div v-if="orgReviewTargetId" class="org-review-form">
+              <h4 class="section-subtitle">组织评价表单</h4>
+              <div v-if="orgReviewItems.length === 0" class="empty-inline">暂无评价项</div>
+              <div v-else class="score-form">
+                <div
+                  v-for="item in orgReviewItems.filter((i: any) => i.item_type === 'score')"
+                  :key="item.id"
+                  class="score-item-row"
+                >
+                  <div class="score-item-header">
+                    <span class="score-item-name">{{ item.item_name }}</span>
+                    <span class="score-item-max">（满分{{ item.max_score }}分，权重{{ (item.weight * 100).toFixed(0) }}%）</span>
+                  </div>
+                  <div class="score-input-wrap">
+                    <input
+                      type="range"
+                      :min="0"
+                      :max="item.max_score"
+                      v-model.number="orgReviewScores[item.id]"
+                      class="score-range"
+                    />
+                    <input
+                      type="number"
+                      :min="0"
+                      :max="item.max_score"
+                      v-model.number="orgReviewScores[item.id]"
+                      class="score-number"
+                    />
+                    <span class="score-max-label">/{{ item.max_score }}</span>
+                  </div>
+                </div>
+                <div
+                  v-for="item in orgReviewItems.filter((i: any) => i.item_type === 'text')"
+                  :key="item.id"
+                  class="score-item-row"
+                >
+                  <div class="score-item-header">
+                    <span class="score-item-name">{{ item.item_name }}</span>
+                  </div>
+                  <textarea
+                    v-model="orgReviewTexts[item.id]"
+                    class="score-textarea"
+                    placeholder="请输入评价意见..."
+                    rows="3"
+                  ></textarea>
+                </div>
+                <button class="btn btn-primary submit-btn" @click="submitOrgReview" :disabled="orgReviewSaving">
+                  {{ orgReviewSaving ? '提交中...' : '提交组织评价' }}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -146,7 +239,10 @@ import {
   getAdminDemocraticReviews,
   createDemocraticReview,
   updateDemocraticReview,
-  deleteDemocraticReview
+  deleteDemocraticReview,
+  getOrganizationReviewScores,
+  submitOrganizationReview,
+  getDemocraticReviewResults
 } from '@/api/democraticReview'
 import type { DemocraticReview } from '@/types'
 
@@ -161,6 +257,15 @@ const filterYear = ref('')
 const keyword = ref('')
 const showCreateModal = ref(false)
 const editingReview = ref<DemocraticReview | null>(null)
+const showOrgReviewModal = ref(false)
+const orgReview = ref<DemocraticReview | null>(null)
+const orgReviewTargetId = ref<number | ''>('')
+const orgReviewUsers = ref<any[]>([])
+const orgReviewScores = ref<Record<number, number>>({})
+const orgReviewTexts = ref<Record<number, string>>({})
+const orgReviewItems = ref<any[]>([])
+const orgReviewSaving = ref(false)
+const orgReviewLoading = ref(false)
 
 const form = ref({
   title: '',
@@ -306,6 +411,128 @@ const deleteReview = async (review: DemocraticReview) => {
   } catch (error) {
     console.error('删除失败', error)
   }
+}
+
+const openOrganizationReview = async (review: DemocraticReview) => {
+  orgReview.value = review
+  orgReviewLoading.value = true
+  try {
+    const res = await getDemocraticReviewResults(review.id)
+    orgReviewUsers.value = res.data.map(r => ({
+      user_id: r.user_id,
+      real_name: r.real_name,
+      branch: r.branch,
+      mutual_avg_score: r.mutual_avg_score,
+      organization_score: r.organization_score,
+      total_score: r.total_score,
+      rank: r.rank
+    }))
+    showOrgReviewModal.value = true
+  } catch (error) {
+    console.error('加载用户列表失败', error)
+  } finally {
+    orgReviewLoading.value = false
+  }
+}
+
+const closeOrgReviewModal = () => {
+  showOrgReviewModal.value = false
+  orgReview.value = null
+  orgReviewTargetId.value = ''
+  orgReviewScores.value = {}
+  orgReviewTexts.value = {}
+  orgReviewItems.value = []
+}
+
+const selectOrgReviewTarget = async (userId: number) => {
+  if (!orgReview.value) return
+  orgReviewTargetId.value = userId
+  orgReviewLoading.value = true
+  try {
+    const res = await getOrganizationReviewScores(orgReview.value.id, userId)
+    orgReviewItems.value = res.data.form_items || []
+
+    orgReviewScores.value = {}
+    orgReviewTexts.value = {}
+
+    for (const item of orgReviewItems.value) {
+      if (item.item_type === 'score') {
+        orgReviewScores.value[item.id] = 0
+      } else {
+        orgReviewTexts.value[item.id] = ''
+      }
+    }
+
+    if (res.data.scores && res.data.scores.length > 0) {
+      for (const s of res.data.scores) {
+        const item = orgReviewItems.value.find((fi: any) => fi.id === s.form_item_id)
+        if (item) {
+          if (item.item_type === 'score') {
+            orgReviewScores.value[item.id] = s.score || 0
+          } else {
+            orgReviewTexts.value[item.id] = s.content || ''
+          }
+        }
+      }
+    }
+  } catch (error) {
+    console.error('加载组织评价失败', error)
+  } finally {
+    orgReviewLoading.value = false
+  }
+}
+
+const submitOrgReview = async () => {
+  if (!orgReview.value || !orgReviewTargetId.value) return
+
+  const scoreItems = orgReviewItems.value.filter((i: any) => i.item_type === 'score')
+  const textItems = orgReviewItems.value.filter((i: any) => i.item_type === 'text')
+
+  const scores: { form_item_id: number; score: number; content?: string }[] = scoreItems.map((item: any) => ({
+    form_item_id: item.id,
+    score: orgReviewScores.value[item.id] || 0
+  }))
+
+  textItems.forEach((item: any) => {
+    if (orgReviewTexts.value[item.id]) {
+      scores.push({
+        form_item_id: item.id,
+        score: 0,
+        content: orgReviewTexts.value[item.id]
+      })
+    }
+  })
+
+  orgReviewSaving.value = true
+  try {
+    await submitOrganizationReview(orgReview.value.id, {
+      target_user_id: orgReviewTargetId.value as number,
+      scores
+    })
+    alert('组织评价提交成功！')
+    const idx = orgReviewUsers.value.findIndex(u => u.user_id === orgReviewTargetId.value)
+    if (idx >= 0) {
+      const res = await getDemocraticReviewResults(orgReview.value.id)
+      orgReviewUsers.value = res.data.map(r => ({
+        user_id: r.user_id,
+        real_name: r.real_name,
+        branch: r.branch,
+        mutual_avg_score: r.mutual_avg_score,
+        organization_score: r.organization_score,
+        total_score: r.total_score,
+        rank: r.rank
+      }))
+    }
+  } catch (error: any) {
+    alert(error?.response?.data?.message || '提交失败')
+  } finally {
+    orgReviewSaving.value = false
+  }
+}
+
+const hasOrgReview = (userId: number) => {
+  const user = orgReviewUsers.value.find(u => u.user_id === userId)
+  return user && user.organization_score > 0
 }
 
 const getStatusText = (status: string) => {
@@ -617,5 +844,226 @@ onMounted(() => {
 
 @keyframes spin {
   to { transform: rotate(360deg); }
+}
+
+.org-review-modal {
+  width: 95%;
+  max-width: 900px;
+  max-height: 85vh;
+}
+
+.org-review-content {
+  display: grid;
+  grid-template-columns: 320px 1fr;
+  gap: 20px;
+  height: calc(85vh - 120px);
+}
+
+.section-subtitle {
+  font-size: 14px;
+  font-weight: 600;
+  margin: 0 0 12px;
+  color: var(--text-primary);
+}
+
+.org-review-users {
+  overflow-y: auto;
+  padding-right: 8px;
+}
+
+.user-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.user-item {
+  padding: 12px;
+  background: var(--bg-light);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: all 0.2s;
+  border: 2px solid transparent;
+  position: relative;
+}
+
+.user-item:hover {
+  background: #e9ecef;
+}
+
+.user-item.active {
+  background: #e8f0fe;
+  border-color: var(--primary-color);
+}
+
+.user-item.reviewed {
+  background: #f0fdf4;
+}
+
+.user-item.reviewed.active {
+  background: #dcfce7;
+  border-color: #22c55e;
+}
+
+.user-info {
+  margin-bottom: 6px;
+}
+
+.user-name {
+  font-weight: 600;
+  font-size: 14px;
+  color: var(--text-primary);
+  display: block;
+}
+
+.user-branch {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.user-scores {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.user-scores .score-item {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.user-scores .score-item.has-score {
+  color: #16a34a;
+  font-weight: 500;
+}
+
+.user-scores .score-item.total {
+  color: var(--primary-color);
+  font-weight: 600;
+  font-size: 13px;
+}
+
+.reviewed-badge {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 20px;
+  height: 20px;
+  background: #22c55e;
+  color: white;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.org-review-form {
+  overflow-y: auto;
+  padding-left: 20px;
+  border-left: 1px solid var(--border-color);
+}
+
+.score-form {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.score-item-row {
+  padding: 14px;
+  background: var(--bg-light);
+  border-radius: var(--radius-md);
+}
+
+.score-item-header {
+  margin-bottom: 10px;
+}
+
+.score-item-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.score-item-max {
+  font-size: 12px;
+  color: var(--text-secondary);
+  margin-left: 8px;
+}
+
+.score-input-wrap {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.score-range {
+  flex: 1;
+  accent-color: var(--primary-color);
+}
+
+.score-number {
+  width: 60px;
+  padding: 6px 8px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  text-align: center;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.score-max-label {
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.score-textarea {
+  width: 100%;
+  padding: 10px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  font-size: 14px;
+  resize: vertical;
+  font-family: inherit;
+  min-height: 80px;
+}
+
+.submit-btn {
+  padding: 12px 40px;
+  background: var(--primary-color);
+  color: white;
+  border: none;
+  border-radius: var(--radius-md);
+  font-size: 15px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.2s;
+  align-self: center;
+  margin-top: 10px;
+}
+
+.submit-btn:hover:not(:disabled) {
+  background: var(--primary-dark);
+}
+
+.submit-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+@media (max-width: 768px) {
+  .org-review-content {
+    grid-template-columns: 1fr;
+    height: auto;
+  }
+
+  .org-review-form {
+    padding-left: 0;
+    border-left: none;
+    border-top: 1px solid var(--border-color);
+    padding-top: 16px;
+  }
 }
 </style>

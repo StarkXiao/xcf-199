@@ -1350,6 +1350,42 @@ router.get('/democratic-review-stats/overview', async (req, res) => {
   }
 });
 
+router.get('/democratic-reviews/:id/organization-scores/:userId', async (req, res) => {
+  try {
+    const { id, userId } = req.params;
+    const reviewId = parseInt(id);
+    const targetUserId = parseInt(userId);
+
+    const review = await db.getById('democratic_reviews', reviewId);
+    if (!review) {
+      return res.status(404).json({ code: 404, message: '评议不存在' });
+    }
+
+    const formItems = db.useMySQL
+      ? await db.exec('SELECT * FROM democratic_review_form_items WHERE review_id = ? ORDER BY sort_order', [reviewId])
+      : (await db.findMany('democratic_review_form_items', fi => fi.review_id === reviewId)).sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
+
+    const scores = db.useMySQL
+      ? await db.exec('SELECT * FROM democratic_review_scores WHERE review_id = ? AND target_user_id = ? AND review_type = ?', [reviewId, targetUserId, 'organization'])
+      : await db.findMany('democratic_review_scores', s => s.review_id === reviewId && s.target_user_id === targetUserId && s.review_type === 'organization');
+
+    const targetUser = await db.getById('users', targetUserId);
+
+    res.json({
+      code: 200,
+      message: '获取成功',
+      data: {
+        form_items: formItems,
+        scores,
+        target_user: targetUser ? { id: targetUser.id, real_name: targetUser.real_name, branch: targetUser.branch } : null
+      }
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ code: 500, message: '服务器内部错误', error: err.message });
+  }
+});
+
 router.get('/democratic-review-stats/export/:id', async (req, res) => {
   try {
     const { id } = req.params;

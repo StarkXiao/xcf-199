@@ -80,3 +80,11 @@ export const getDemocraticReviewStats = () => {
 export const exportDemocraticReview = (id: number) => {
   return `/api/admin/democratic-review-stats/export/${id}`
 }
+
+export const getOrganizationReviewScores = (reviewId: number, userId: number) => {
+  return request.get<any, ApiResponse<{
+    form_items: any[]
+    scores: any[]
+    target_user: { id: number; real_name: string; branch: string } | null
+  }>>(`/admin/democratic-reviews/${reviewId}/organization-scores/${userId}`)
+}

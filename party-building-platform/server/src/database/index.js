@@ -30,6 +30,11 @@ let dbData = {
   volunteer_signups: [],
   volunteer_service_records: [],
   volunteer_reviews: [],
+  branch_meetings: [],
+  branch_meeting_agendas: [],
+  branch_meeting_attendees: [],
+  branch_meeting_checkins: [],
+  branch_meeting_resolutions: [],
   counters: {
     users: 0,
     articles: 0,
@@ -45,7 +50,12 @@ let dbData = {
     volunteer_projects: 0,
     volunteer_signups: 0,
     volunteer_service_records: 0,
-    volunteer_reviews: 0
+    volunteer_reviews: 0,
+    branch_meetings: 0,
+    branch_meeting_agendas: 0,
+    branch_meeting_attendees: 0,
+    branch_meeting_checkins: 0,
+    branch_meeting_resolutions: 0
   }
 };
 
@@ -339,6 +349,85 @@ async function initMySQL() {
         FOREIGN KEY (project_id) REFERENCES volunteer_projects(id) ON DELETE CASCADE,
         FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
         FOREIGN KEY (signup_id) REFERENCES volunteer_signups(id) ON DELETE CASCADE
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    `);
+
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS branch_meetings (
+        id INTEGER PRIMARY KEY AUTO_INCREMENT,
+        title VARCHAR(500) NOT NULL,
+        branch VARCHAR(200) NOT NULL,
+        meeting_type VARCHAR(50) NOT NULL,
+        location VARCHAR(500),
+        meeting_time DATETIME NOT NULL,
+        end_time DATETIME,
+        status VARCHAR(20) DEFAULT 'notified',
+        notification_content TEXT,
+        minutes_content TEXT,
+        created_by INTEGER,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    `);
+
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS branch_meeting_agendas (
+        id INTEGER PRIMARY KEY AUTO_INCREMENT,
+        meeting_id INTEGER NOT NULL,
+        title VARCHAR(500) NOT NULL,
+        content TEXT,
+        sort_order INTEGER DEFAULT 0,
+        status VARCHAR(20) DEFAULT 'pending',
+        discussion_result TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (meeting_id) REFERENCES branch_meetings(id) ON DELETE CASCADE
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    `);
+
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS branch_meeting_attendees (
+        id INTEGER PRIMARY KEY AUTO_INCREMENT,
+        meeting_id INTEGER NOT NULL,
+        user_id INTEGER NOT NULL,
+        is_required INTEGER DEFAULT 1,
+        status VARCHAR(20) DEFAULT 'pending',
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE KEY unique_attendee (meeting_id, user_id),
+        FOREIGN KEY (meeting_id) REFERENCES branch_meetings(id) ON DELETE CASCADE,
+        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    `);
+
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS branch_meeting_checkins (
+        id INTEGER PRIMARY KEY AUTO_INCREMENT,
+        meeting_id INTEGER NOT NULL,
+        user_id INTEGER NOT NULL,
+        checkin_time DATETIME DEFAULT CURRENT_TIMESTAMP,
+        checkin_type VARCHAR(20) DEFAULT 'onsite',
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE KEY unique_checkin (meeting_id, user_id),
+        FOREIGN KEY (meeting_id) REFERENCES branch_meetings(id) ON DELETE CASCADE,
+        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    `);
+
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS branch_meeting_resolutions (
+        id INTEGER PRIMARY KEY AUTO_INCREMENT,
+        meeting_id INTEGER NOT NULL,
+        agenda_id INTEGER,
+        title VARCHAR(500) NOT NULL,
+        content TEXT,
+        result VARCHAR(20) DEFAULT 'pending',
+        vote_for INTEGER DEFAULT 0,
+        vote_against INTEGER DEFAULT 0,
+        vote_abstain INTEGER DEFAULT 0,
+        resolved_at DATETIME,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (meeting_id) REFERENCES branch_meetings(id) ON DELETE CASCADE,
+        FOREIGN KEY (agenda_id) REFERENCES branch_meeting_agendas(id) ON DELETE SET NULL
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
     `);
 
@@ -645,6 +734,101 @@ async function seedMySQL() {
     );
   }
   await pool.query(`ALTER TABLE volunteer_reviews AUTO_INCREMENT = 3`);
+
+  const branchMeetings = [
+    { id: 1, title: '第一党支部支委会', branch: '第一党支部', type: 'branch_committee', location: '第一党支部活动室', days: 3, status: 'notified', notification: '请各位支委准时参加本次支委会，讨论本季度党建工作安排。', minutes: '' },
+    { id: 2, title: '第二党支部党员大会', branch: '第二党支部', type: 'member_congress', location: '综合会议室', days: 7, status: 'notified', notification: '召开第二党支部全体党员大会，审议年度工作总结和下年度工作计划。', minutes: '' },
+    { id: 3, title: '第三党支部党小组会', branch: '第三党支部', type: 'group_meeting', location: '第三党支部活动室', days: -5, status: 'completed', notification: '组织学习党的二十大报告精神。', minutes: '本次党小组会重点学习了党的二十大报告精神，与会党员结合自身工作实际进行了深入讨论。大家一致表示要以党的二十大精神为指引，立足岗位，勇于担当。' },
+    { id: 4, title: '机关第一党支部党课', branch: '机关第一党支部', type: 'party_lesson', location: '大会议室', days: -10, status: 'completed', notification: '邀请市委党校老师讲授习近平新时代中国特色社会主义思想专题党课。', minutes: '专题党课由市委党校王教授主讲，围绕习近平新时代中国特色社会主义思想的核心要义、精神实质和实践要求进行了深入解读。全体党员认真听讲，受益匪浅。' },
+    { id: 5, title: '第一党支部党员大会', branch: '第一党支部', type: 'member_congress', location: '大会议室', days: -20, status: 'completed', notification: '召开第一党支部党员大会，进行民主评议党员。', minutes: '本次党员大会进行了民主评议党员工作，全体党员逐一进行自我评价和互相评议，最终评选出优秀党员3名，合格党员12名。' },
+    { id: 6, title: '第二党支部支委会', branch: '第二党支部', type: 'branch_committee', location: '第二党支部活动室', days: 14, status: 'notified', notification: '讨论研究入党积极分子培养考察事宜。', minutes: '' }
+  ];
+
+  for (const m of branchMeetings) {
+    await pool.query(
+      `INSERT INTO branch_meetings (id, title, branch, meeting_type, location, meeting_time, end_time, status, notification_content, minutes_content, created_by, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [m.id, m.title, m.branch, m.type, m.location, addDays(m.days), addDays(m.days), m.status, m.notification, m.minutes, 1, now, now]
+    );
+  }
+  await pool.query(`ALTER TABLE branch_meetings AUTO_INCREMENT = 7`);
+
+  const meetingAgendas = [
+    { id: 1, meetingId: 1, title: '本季度党建工作计划审议', content: '审议并通过本季度党建工作计划安排', sortOrder: 1, status: 'pending', result: '' },
+    { id: 2, meetingId: 1, title: '入党积极分子培养情况汇报', content: '听取培养联系人关于入党积极分子培养情况的汇报', sortOrder: 2, status: 'pending', result: '' },
+    { id: 3, meetingId: 2, title: '年度工作总结审议', content: '审议党支部2024年度工作总结报告', sortOrder: 1, status: 'pending', result: '' },
+    { id: 4, meetingId: 2, title: '下年度工作计划讨论', content: '讨论并制定2025年度党支部工作计划', sortOrder: 2, status: 'pending', result: '' },
+    { id: 5, meetingId: 3, title: '党的二十大报告精神学习', content: '深入学习党的二十大报告核心要义', sortOrder: 1, status: 'passed', result: '全体党员一致同意深入学习贯彻党的二十大精神' },
+    { id: 6, meetingId: 4, title: '习近平新时代中国特色社会主义思想专题学习', content: '系统学习习近平新时代中国特色社会主义思想', sortOrder: 1, status: 'passed', result: '通过集中学习，全体党员对习近平新时代中国特色社会主义思想有了更深入的理解' },
+    { id: 7, meetingId: 5, title: '民主评议党员', content: '开展党员民主评议工作', sortOrder: 1, status: 'passed', result: '评选出优秀党员3名，合格党员12名' },
+    { id: 8, meetingId: 5, title: '党费收缴情况通报', content: '通报本年度党费收缴使用情况', sortOrder: 2, status: 'passed', result: '党费收缴率达100%，使用情况公开透明' },
+    { id: 9, meetingId: 6, title: '入党积极分子培养考察', content: '研究讨论入党积极分子培养考察事宜', sortOrder: 1, status: 'pending', result: '' }
+  ];
+
+  for (const a of meetingAgendas) {
+    await pool.query(
+      `INSERT INTO branch_meeting_agendas (id, meeting_id, title, content, sort_order, status, discussion_result, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      [a.id, a.meetingId, a.title, a.content, a.sortOrder, a.status, a.result, now]
+    );
+  }
+  await pool.query(`ALTER TABLE branch_meeting_agendas AUTO_INCREMENT = 10`);
+
+  const meetingAttendees = [
+    { id: 1, meetingId: 1, userId: 1, isRequired: 1, status: 'confirmed' },
+    { id: 2, meetingId: 1, userId: 2, isRequired: 1, status: 'confirmed' },
+    { id: 3, meetingId: 1, userId: 5, isRequired: 0, status: 'pending' },
+    { id: 4, meetingId: 2, userId: 3, isRequired: 1, status: 'confirmed' },
+    { id: 5, meetingId: 2, userId: 4, isRequired: 1, status: 'pending' },
+    { id: 6, meetingId: 3, userId: 4, isRequired: 1, status: 'confirmed' },
+    { id: 7, meetingId: 3, userId: 3, isRequired: 1, status: 'confirmed' },
+    { id: 8, meetingId: 4, userId: 1, isRequired: 1, status: 'confirmed' },
+    { id: 9, meetingId: 4, userId: 2, isRequired: 1, status: 'confirmed' },
+    { id: 10, meetingId: 4, userId: 5, isRequired: 1, status: 'leave' },
+    { id: 11, meetingId: 5, userId: 1, isRequired: 1, status: 'confirmed' },
+    { id: 12, meetingId: 5, userId: 2, isRequired: 1, status: 'confirmed' },
+    { id: 13, meetingId: 5, userId: 5, isRequired: 1, status: 'confirmed' },
+    { id: 14, meetingId: 6, userId: 3, isRequired: 1, status: 'pending' }
+  ];
+
+  for (const a of meetingAttendees) {
+    await pool.query(
+      `INSERT INTO branch_meeting_attendees (id, meeting_id, user_id, is_required, status, created_at) VALUES (?, ?, ?, ?, ?, ?)`,
+      [a.id, a.meetingId, a.userId, a.isRequired, a.status, now]
+    );
+  }
+  await pool.query(`ALTER TABLE branch_meeting_attendees AUTO_INCREMENT = 15`);
+
+  const meetingCheckins = [
+    { id: 1, meetingId: 3, userId: 4, time: addDays(-5), type: 'onsite' },
+    { id: 2, meetingId: 3, userId: 3, time: addDays(-5), type: 'onsite' },
+    { id: 3, meetingId: 4, userId: 1, time: addDays(-10), type: 'onsite' },
+    { id: 4, meetingId: 4, userId: 2, time: addDays(-10), type: 'online' },
+    { id: 5, meetingId: 5, userId: 1, time: addDays(-20), type: 'onsite' },
+    { id: 6, meetingId: 5, userId: 2, time: addDays(-20), type: 'onsite' },
+    { id: 7, meetingId: 5, userId: 5, time: addDays(-20), type: 'onsite' }
+  ];
+
+  for (const c of meetingCheckins) {
+    await pool.query(
+      `INSERT INTO branch_meeting_checkins (id, meeting_id, user_id, checkin_time, checkin_type, created_at) VALUES (?, ?, ?, ?, ?, ?)`,
+      [c.id, c.meetingId, c.userId, c.time, c.type, now]
+    );
+  }
+  await pool.query(`ALTER TABLE branch_meeting_checkins AUTO_INCREMENT = 8`);
+
+  const meetingResolutions = [
+    { id: 1, meetingId: 3, agendaId: 5, title: '深入学习贯彻党的二十大精神', content: '全体党员深入学习贯彻党的二十大精神，结合实际工作抓好落实', result: 'passed', voteFor: 8, voteAgainst: 0, voteAbstain: 0, resolvedAt: addDays(-5) },
+    { id: 2, meetingId: 4, agendaId: 6, title: '习近平新时代中国特色社会主义思想学习决议', content: '全体党员深入学习习近平新时代中国特色社会主义思想，持续加强理论武装', result: 'passed', voteFor: 15, voteAgainst: 0, voteAbstain: 1, resolvedAt: addDays(-10) },
+    { id: 3, meetingId: 5, agendaId: 7, title: '民主评议党员决议', content: '经民主评议，评选出优秀党员3名，合格党员12名', result: 'passed', voteFor: 14, voteAgainst: 0, voteAbstain: 1, resolvedAt: addDays(-20) },
+    { id: 4, meetingId: 5, agendaId: 8, title: '党费收缴使用情况通报决议', content: '本年度党费收缴率达100%，使用情况公开透明，通过通报', result: 'passed', voteFor: 15, voteAgainst: 0, voteAbstain: 0, resolvedAt: addDays(-20) }
+  ];
+
+  for (const r of meetingResolutions) {
+    await pool.query(
+      `INSERT INTO branch_meeting_resolutions (id, meeting_id, agenda_id, title, content, result, vote_for, vote_against, vote_abstain, resolved_at, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [r.id, r.meetingId, r.agendaId, r.title, r.content, r.result, r.voteFor, r.voteAgainst, r.voteAbstain, r.resolvedAt, now]
+    );
+  }
+  await pool.query(`ALTER TABLE branch_meeting_resolutions AUTO_INCREMENT = 5`);
 }
 
 function seedJson() {
@@ -877,6 +1061,72 @@ function seedJson() {
     { id: 2, project_id: 3, user_id: 3, signup_id: 2, rating: 4, content: '活动很充实，希望能多举办这样的活动。', created_at: now }
   ];
   dbData.counters.volunteer_reviews = 2;
+
+  const addDaysIso = (days) => {
+    const d = new Date();
+    d.setDate(d.getDate() + days);
+    return d.toISOString();
+  };
+
+  dbData.branch_meetings = [
+    { id: 1, title: '第一党支部支委会', branch: '第一党支部', meeting_type: 'branch_committee', location: '第一党支部活动室', meeting_time: addDaysIso(3), end_time: addDaysIso(3), status: 'notified', notification_content: '请各位支委准时参加本次支委会，讨论本季度党建工作安排。', minutes_content: '', created_by: 1, created_at: now, updated_at: now },
+    { id: 2, title: '第二党支部党员大会', branch: '第二党支部', meeting_type: 'member_congress', location: '综合会议室', meeting_time: addDaysIso(7), end_time: addDaysIso(7), status: 'notified', notification_content: '召开第二党支部全体党员大会，审议年度工作总结和下年度工作计划。', minutes_content: '', created_by: 1, created_at: now, updated_at: now },
+    { id: 3, title: '第三党支部党小组会', branch: '第三党支部', meeting_type: 'group_meeting', location: '第三党支部活动室', meeting_time: addDaysIso(-5), end_time: addDaysIso(-5), status: 'completed', notification_content: '组织学习党的二十大报告精神。', minutes_content: '本次党小组会重点学习了党的二十大报告精神，与会党员结合自身工作实际进行了深入讨论。大家一致表示要以党的二十大精神为指引，立足岗位，勇于担当。', created_by: 1, created_at: now, updated_at: now },
+    { id: 4, title: '机关第一党支部党课', branch: '机关第一党支部', meeting_type: 'party_lesson', location: '大会议室', meeting_time: addDaysIso(-10), end_time: addDaysIso(-10), status: 'completed', notification_content: '邀请市委党校老师讲授习近平新时代中国特色社会主义思想专题党课。', minutes_content: '专题党课由市委党校王教授主讲，围绕习近平新时代中国特色社会主义思想的核心要义、精神实质和实践要求进行了深入解读。全体党员认真听讲，受益匪浅。', created_by: 1, created_at: now, updated_at: now },
+    { id: 5, title: '第一党支部党员大会', branch: '第一党支部', meeting_type: 'member_congress', location: '大会议室', meeting_time: addDaysIso(-20), end_time: addDaysIso(-20), status: 'completed', notification_content: '召开第一党支部党员大会，进行民主评议党员。', minutes_content: '本次党员大会进行了民主评议党员工作，全体党员逐一进行自我评价和互相评议，最终评选出优秀党员3名，合格党员12名。', created_by: 1, created_at: now, updated_at: now },
+    { id: 6, title: '第二党支部支委会', branch: '第二党支部', meeting_type: 'branch_committee', location: '第二党支部活动室', meeting_time: addDaysIso(14), end_time: addDaysIso(14), status: 'notified', notification_content: '讨论研究入党积极分子培养考察事宜。', minutes_content: '', created_by: 1, created_at: now, updated_at: now }
+  ];
+  dbData.counters.branch_meetings = 6;
+
+  dbData.branch_meeting_agendas = [
+    { id: 1, meeting_id: 1, title: '本季度党建工作计划审议', content: '审议并通过本季度党建工作计划安排', sort_order: 1, status: 'pending', discussion_result: '', created_at: now },
+    { id: 2, meeting_id: 1, title: '入党积极分子培养情况汇报', content: '听取培养联系人关于入党积极分子培养情况的汇报', sort_order: 2, status: 'pending', discussion_result: '', created_at: now },
+    { id: 3, meeting_id: 2, title: '年度工作总结审议', content: '审议党支部2024年度工作总结报告', sort_order: 1, status: 'pending', discussion_result: '', created_at: now },
+    { id: 4, meeting_id: 2, title: '下年度工作计划讨论', content: '讨论并制定2025年度党支部工作计划', sort_order: 2, status: 'pending', discussion_result: '', created_at: now },
+    { id: 5, meeting_id: 3, title: '党的二十大报告精神学习', content: '深入学习党的二十大报告核心要义', sort_order: 1, status: 'passed', discussion_result: '全体党员一致同意深入学习贯彻党的二十大精神', created_at: now },
+    { id: 6, meeting_id: 4, title: '习近平新时代中国特色社会主义思想专题学习', content: '系统学习习近平新时代中国特色社会主义思想', sort_order: 1, status: 'passed', discussion_result: '通过集中学习，全体党员对习近平新时代中国特色社会主义思想有了更深入的理解', created_at: now },
+    { id: 7, meeting_id: 5, title: '民主评议党员', content: '开展党员民主评议工作', sort_order: 1, status: 'passed', discussion_result: '评选出优秀党员3名，合格党员12名', created_at: now },
+    { id: 8, meeting_id: 5, title: '党费收缴情况通报', content: '通报本年度党费收缴使用情况', sort_order: 2, status: 'passed', discussion_result: '党费收缴率达100%，使用情况公开透明', created_at: now },
+    { id: 9, meeting_id: 6, title: '入党积极分子培养考察', content: '研究讨论入党积极分子培养考察事宜', sort_order: 1, status: 'pending', discussion_result: '', created_at: now }
+  ];
+  dbData.counters.branch_meeting_agendas = 9;
+
+  dbData.branch_meeting_attendees = [
+    { id: 1, meeting_id: 1, user_id: 1, is_required: 1, status: 'confirmed', created_at: now },
+    { id: 2, meeting_id: 1, user_id: 2, is_required: 1, status: 'confirmed', created_at: now },
+    { id: 3, meeting_id: 1, user_id: 5, is_required: 0, status: 'pending', created_at: now },
+    { id: 4, meeting_id: 2, user_id: 3, is_required: 1, status: 'confirmed', created_at: now },
+    { id: 5, meeting_id: 2, user_id: 4, is_required: 1, status: 'pending', created_at: now },
+    { id: 6, meeting_id: 3, user_id: 4, is_required: 1, status: 'confirmed', created_at: now },
+    { id: 7, meeting_id: 3, user_id: 3, is_required: 1, status: 'confirmed', created_at: now },
+    { id: 8, meeting_id: 4, user_id: 1, is_required: 1, status: 'confirmed', created_at: now },
+    { id: 9, meeting_id: 4, user_id: 2, is_required: 1, status: 'confirmed', created_at: now },
+    { id: 10, meeting_id: 4, user_id: 5, is_required: 1, status: 'leave', created_at: now },
+    { id: 11, meeting_id: 5, user_id: 1, is_required: 1, status: 'confirmed', created_at: now },
+    { id: 12, meeting_id: 5, user_id: 2, is_required: 1, status: 'confirmed', created_at: now },
+    { id: 13, meeting_id: 5, user_id: 5, is_required: 1, status: 'confirmed', created_at: now },
+    { id: 14, meeting_id: 6, user_id: 3, is_required: 1, status: 'pending', created_at: now }
+  ];
+  dbData.counters.branch_meeting_attendees = 14;
+
+  dbData.branch_meeting_checkins = [
+    { id: 1, meeting_id: 3, user_id: 4, checkin_time: addDaysIso(-5), checkin_type: 'onsite', created_at: now },
+    { id: 2, meeting_id: 3, user_id: 3, checkin_time: addDaysIso(-5), checkin_type: 'onsite', created_at: now },
+    { id: 3, meeting_id: 4, user_id: 1, checkin_time: addDaysIso(-10), checkin_type: 'onsite', created_at: now },
+    { id: 4, meeting_id: 4, user_id: 2, checkin_time: addDaysIso(-10), checkin_type: 'online', created_at: now },
+    { id: 5, meeting_id: 5, user_id: 1, checkin_time: addDaysIso(-20), checkin_type: 'onsite', created_at: now },
+    { id: 6, meeting_id: 5, user_id: 2, checkin_time: addDaysIso(-20), checkin_type: 'onsite', created_at: now },
+    { id: 7, meeting_id: 5, user_id: 5, checkin_time: addDaysIso(-20), checkin_type: 'onsite', created_at: now }
+  ];
+  dbData.counters.branch_meeting_checkins = 7;
+
+  dbData.branch_meeting_resolutions = [
+    { id: 1, meeting_id: 3, agenda_id: 5, title: '深入学习贯彻党的二十大精神', content: '全体党员深入学习贯彻党的二十大精神，结合实际工作抓好落实', result: 'passed', vote_for: 8, vote_against: 0, vote_abstain: 0, resolved_at: addDaysIso(-5), created_at: now },
+    { id: 2, meeting_id: 4, agenda_id: 6, title: '习近平新时代中国特色社会主义思想学习决议', content: '全体党员深入学习习近平新时代中国特色社会主义思想，持续加强理论武装', result: 'passed', vote_for: 15, vote_against: 0, vote_abstain: 1, resolved_at: addDaysIso(-10), created_at: now },
+    { id: 3, meeting_id: 5, agenda_id: 7, title: '民主评议党员决议', content: '经民主评议，评选出优秀党员3名，合格党员12名', result: 'passed', vote_for: 14, vote_against: 0, vote_abstain: 1, resolved_at: addDaysIso(-20), created_at: now },
+    { id: 4, meeting_id: 5, agenda_id: 8, title: '党费收缴使用情况通报决议', content: '本年度党费收缴率达100%，使用情况公开透明，通过通报', result: 'passed', vote_for: 15, vote_against: 0, vote_abstain: 0, resolved_at: addDaysIso(-20), created_at: now }
+  ];
+  dbData.counters.branch_meeting_resolutions = 4;
 
   saveDb();
   console.log('JSON 数据库初始化完成！');

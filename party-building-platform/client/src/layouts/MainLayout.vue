@@ -13,6 +13,7 @@
           <router-link to="/points" class="nav-link" :class="{ active: $route.name === 'points' }">积分排行</router-link>
           <router-link to="/volunteer-service" class="nav-link" :class="{ active: $route.name === 'volunteer-service' || $route.name === 'volunteer-service-detail' }">志愿服务</router-link>
           <router-link to="/notices" class="nav-link" :class="{ active: $route.name === 'notices' || $route.name === 'notice-detail' }">支部通知</router-link>
+          <router-link to="/branch-meetings" class="nav-link" :class="{ active: $route.name === 'branch-meetings' || $route.name === 'branch-meeting-detail' }">支部会议</router-link>
           <router-link v-if="userStore.isLoggedIn" to="/party-development" class="nav-link" :class="{ active: $route.name === 'party-development' }">党员发展</router-link>
         </nav>
         <div class="header-right">

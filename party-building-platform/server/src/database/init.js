@@ -230,6 +230,75 @@ function initDatabase() {
       FOREIGN KEY (project_id) REFERENCES volunteer_projects(id) ON DELETE CASCADE,
       UNIQUE(user_id, project_id)
     );
+
+    CREATE TABLE IF NOT EXISTS branch_meetings (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      title TEXT NOT NULL,
+      branch TEXT NOT NULL,
+      meeting_type TEXT NOT NULL,
+      location TEXT,
+      meeting_time DATETIME NOT NULL,
+      end_time DATETIME,
+      status TEXT DEFAULT 'notified',
+      notification_content TEXT,
+      minutes_content TEXT,
+      created_by INTEGER,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS branch_meeting_agendas (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      meeting_id INTEGER NOT NULL,
+      title TEXT NOT NULL,
+      content TEXT,
+      sort_order INTEGER DEFAULT 0,
+      status TEXT DEFAULT 'pending',
+      discussion_result TEXT,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (meeting_id) REFERENCES branch_meetings(id) ON DELETE CASCADE
+    );
+
+    CREATE TABLE IF NOT EXISTS branch_meeting_attendees (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      meeting_id INTEGER NOT NULL,
+      user_id INTEGER NOT NULL,
+      is_required INTEGER DEFAULT 1,
+      status TEXT DEFAULT 'pending',
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (meeting_id) REFERENCES branch_meetings(id) ON DELETE CASCADE,
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+      UNIQUE(meeting_id, user_id)
+    );
+
+    CREATE TABLE IF NOT EXISTS branch_meeting_checkins (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      meeting_id INTEGER NOT NULL,
+      user_id INTEGER NOT NULL,
+      checkin_time DATETIME DEFAULT CURRENT_TIMESTAMP,
+      checkin_type TEXT DEFAULT 'onsite',
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (meeting_id) REFERENCES branch_meetings(id) ON DELETE CASCADE,
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+      UNIQUE(meeting_id, user_id)
+    );
+
+    CREATE TABLE IF NOT EXISTS branch_meeting_resolutions (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      meeting_id INTEGER NOT NULL,
+      agenda_id INTEGER,
+      title TEXT NOT NULL,
+      content TEXT,
+      result TEXT DEFAULT 'pending',
+      vote_for INTEGER DEFAULT 0,
+      vote_against INTEGER DEFAULT 0,
+      vote_abstain INTEGER DEFAULT 0,
+      resolved_at DATETIME,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (meeting_id) REFERENCES branch_meetings(id) ON DELETE CASCADE,
+      FOREIGN KEY (agenda_id) REFERENCES branch_meeting_agendas(id) ON DELETE SET NULL
+    );
   `);
 
   const adminHash = bcrypt.hashSync('admin123', 10);
@@ -674,6 +743,106 @@ function initDatabase() {
 
   volunteerReviews.forEach(review => {
     insertVolunteerReview.run(review.userId, review.projectId, review.rating, review.content, review.isAnonymous);
+  });
+
+  const insertBranchMeeting = db.prepare(`
+    INSERT OR IGNORE INTO branch_meetings (id, title, branch, meeting_type, location, meeting_time, end_time, status, notification_content, minutes_content, created_by)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `);
+
+  const branchMeetings = [
+    { id: 1, title: '第一党支部支委会', branch: '第一党支部', type: 'branch_committee', location: '第一党支部活动室', time: addDays(now, 3), endTime: addDays(now, 3), status: 'notified', notification: '请各位支委准时参加本次支委会，讨论本季度党建工作安排。', minutes: '', createdBy: 1 },
+    { id: 2, title: '第二党支部党员大会', branch: '第二党支部', type: 'member_congress', location: '综合会议室', time: addDays(now, 7), endTime: addDays(now, 7), status: 'notified', notification: '召开第二党支部全体党员大会，审议年度工作总结和下年度工作计划。', minutes: '', createdBy: 1 },
+    { id: 3, title: '第三党支部党小组会', branch: '第三党支部', type: 'group_meeting', location: '第三党支部活动室', time: addDays(now, -5), endTime: addDays(now, -5), status: 'completed', notification: '组织学习党的二十大报告精神。', minutes: '本次党小组会重点学习了党的二十大报告精神，与会党员结合自身工作实际进行了深入讨论。大家一致表示要以党的二十大精神为指引，立足岗位，勇于担当。', createdBy: 1 },
+    { id: 4, title: '机关第一党支部党课', branch: '机关第一党支部', type: 'party_lesson', location: '大会议室', time: addDays(now, -10), endTime: addDays(now, -10), status: 'completed', notification: '邀请市委党校老师讲授习近平新时代中国特色社会主义思想专题党课。', minutes: '专题党课由市委党校王教授主讲，围绕习近平新时代中国特色社会主义思想的核心要义、精神实质和实践要求进行了深入解读。全体党员认真听讲，受益匪浅。', createdBy: 1 },
+    { id: 5, title: '第一党支部党员大会', branch: '第一党支部', type: 'member_congress', location: '大会议室', time: addDays(now, -20), endTime: addDays(now, -20), status: 'completed', notification: '召开第一党支部党员大会，进行民主评议党员。', minutes: '本次党员大会进行了民主评议党员工作，全体党员逐一进行自我评价和互相评议，最终评选出优秀党员3名，合格党员12名。', createdBy: 1 },
+    { id: 6, title: '第二党支部支委会', branch: '第二党支部', type: 'branch_committee', location: '第二党支部活动室', time: addDays(now, 14), endTime: addDays(now, 14), status: 'notified', notification: '讨论研究入党积极分子培养考察事宜。', minutes: '', createdBy: 1 }
+  ];
+
+  branchMeetings.forEach(m => {
+    insertBranchMeeting.run(m.id, m.title, m.branch, m.type, m.location, m.time, m.endTime, m.status, m.notification, m.minutes, m.createdBy);
+  });
+
+  const insertMeetingAgenda = db.prepare(`
+    INSERT OR IGNORE INTO branch_meeting_agendas (id, meeting_id, title, content, sort_order, status, discussion_result)
+    VALUES (?, ?, ?, ?, ?, ?, ?)
+  `);
+
+  const meetingAgendas = [
+    { id: 1, meetingId: 1, title: '本季度党建工作计划审议', content: '审议并通过本季度党建工作计划安排', sortOrder: 1, status: 'pending', result: '' },
+    { id: 2, meetingId: 1, title: '入党积极分子培养情况汇报', content: '听取培养联系人关于入党积极分子培养情况的汇报', sortOrder: 2, status: 'pending', result: '' },
+    { id: 3, meetingId: 2, title: '年度工作总结审议', content: '审议党支部2024年度工作总结报告', sortOrder: 1, status: 'pending', result: '' },
+    { id: 4, meetingId: 2, title: '下年度工作计划讨论', content: '讨论并制定2025年度党支部工作计划', sortOrder: 2, status: 'pending', result: '' },
+    { id: 5, meetingId: 3, title: '党的二十大报告精神学习', content: '深入学习党的二十大报告核心要义', sortOrder: 1, status: 'passed', result: '全体党员一致同意深入学习贯彻党的二十大精神' },
+    { id: 6, meetingId: 4, title: '习近平新时代中国特色社会主义思想专题学习', content: '系统学习习近平新时代中国特色社会主义思想', sortOrder: 1, status: 'passed', result: '通过集中学习，全体党员对习近平新时代中国特色社会主义思想有了更深入的理解' },
+    { id: 7, meetingId: 5, title: '民主评议党员', content: '开展党员民主评议工作', sortOrder: 1, status: 'passed', result: '评选出优秀党员3名，合格党员12名' },
+    { id: 8, meetingId: 5, title: '党费收缴情况通报', content: '通报本年度党费收缴使用情况', sortOrder: 2, status: 'passed', result: '党费收缴率达100%，使用情况公开透明' },
+    { id: 9, meetingId: 6, title: '入党积极分子培养考察', content: '研究讨论入党积极分子培养考察事宜', sortOrder: 1, status: 'pending', result: '' }
+  ];
+
+  meetingAgendas.forEach(a => {
+    insertMeetingAgenda.run(a.id, a.meetingId, a.title, a.content, a.sortOrder, a.status, a.result);
+  });
+
+  const insertMeetingAttendee = db.prepare(`
+    INSERT OR IGNORE INTO branch_meeting_attendees (id, meeting_id, user_id, is_required, status)
+    VALUES (?, ?, ?, ?, ?)
+  `);
+
+  const meetingAttendees = [
+    { id: 1, meetingId: 1, userId: 1, isRequired: 1, status: 'confirmed' },
+    { id: 2, meetingId: 1, userId: 2, isRequired: 1, status: 'confirmed' },
+    { id: 3, meetingId: 1, userId: 5, isRequired: 0, status: 'pending' },
+    { id: 4, meetingId: 2, userId: 3, isRequired: 1, status: 'confirmed' },
+    { id: 5, meetingId: 2, userId: 4, isRequired: 1, status: 'pending' },
+    { id: 6, meetingId: 3, userId: 4, isRequired: 1, status: 'confirmed' },
+    { id: 7, meetingId: 3, userId: 3, isRequired: 1, status: 'confirmed' },
+    { id: 8, meetingId: 4, userId: 1, isRequired: 1, status: 'confirmed' },
+    { id: 9, meetingId: 4, userId: 2, isRequired: 1, status: 'confirmed' },
+    { id: 10, meetingId: 4, userId: 5, isRequired: 1, status: 'leave' },
+    { id: 11, meetingId: 5, userId: 1, isRequired: 1, status: 'confirmed' },
+    { id: 12, meetingId: 5, userId: 2, isRequired: 1, status: 'confirmed' },
+    { id: 13, meetingId: 5, userId: 5, isRequired: 1, status: 'confirmed' },
+    { id: 14, meetingId: 6, userId: 3, isRequired: 1, status: 'pending' }
+  ];
+
+  meetingAttendees.forEach(a => {
+    insertMeetingAttendee.run(a.id, a.meetingId, a.userId, a.isRequired, a.status);
+  });
+
+  const insertMeetingCheckin = db.prepare(`
+    INSERT OR IGNORE INTO branch_meeting_checkins (id, meeting_id, user_id, checkin_time, checkin_type)
+    VALUES (?, ?, ?, ?, ?)
+  `);
+
+  const meetingCheckins = [
+    { id: 1, meetingId: 3, userId: 4, time: addDays(now, -5), type: 'onsite' },
+    { id: 2, meetingId: 3, userId: 3, time: addDays(now, -5), type: 'onsite' },
+    { id: 3, meetingId: 4, userId: 1, time: addDays(now, -10), type: 'onsite' },
+    { id: 4, meetingId: 4, userId: 2, time: addDays(now, -10), type: 'online' },
+    { id: 5, meetingId: 5, userId: 1, time: addDays(now, -20), type: 'onsite' },
+    { id: 6, meetingId: 5, userId: 2, time: addDays(now, -20), type: 'onsite' },
+    { id: 7, meetingId: 5, userId: 5, time: addDays(now, -20), type: 'onsite' }
+  ];
+
+  meetingCheckins.forEach(c => {
+    insertMeetingCheckin.run(c.id, c.meetingId, c.userId, c.time, c.type);
+  });
+
+  const insertMeetingResolution = db.prepare(`
+    INSERT OR IGNORE INTO branch_meeting_resolutions (id, meeting_id, agenda_id, title, content, result, vote_for, vote_against, vote_abstain, resolved_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `);
+
+  const meetingResolutions = [
+    { id: 1, meetingId: 3, agendaId: 5, title: '深入学习贯彻党的二十大精神', content: '全体党员深入学习贯彻党的二十大精神，结合实际工作抓好落实', result: 'passed', voteFor: 8, voteAgainst: 0, voteAbstain: 0, resolvedAt: addDays(now, -5) },
+    { id: 2, meetingId: 4, agendaId: 6, title: '习近平新时代中国特色社会主义思想学习决议', content: '全体党员深入学习习近平新时代中国特色社会主义思想，持续加强理论武装', result: 'passed', voteFor: 15, voteAgainst: 0, voteAbstain: 1, resolvedAt: addDays(now, -10) },
+    { id: 3, meetingId: 5, agendaId: 7, title: '民主评议党员决议', content: '经民主评议，评选出优秀党员3名，合格党员12名', result: 'passed', voteFor: 14, voteAgainst: 0, voteAbstain: 1, resolvedAt: addDays(now, -20) },
+    { id: 4, meetingId: 5, agendaId: 8, title: '党费收缴使用情况通报决议', content: '本年度党费收缴率达100%，使用情况公开透明，通过通报', result: 'passed', voteFor: 15, voteAgainst: 0, voteAbstain: 0, resolvedAt: addDays(now, -20) }
+  ];
+
+  meetingResolutions.forEach(r => {
+    insertMeetingResolution.run(r.id, r.meetingId, r.agendaId, r.title, r.content, r.result, r.voteFor, r.voteAgainst, r.voteAbstain, r.resolvedAt);
   });
 
   console.log('数据库初始化完成！');

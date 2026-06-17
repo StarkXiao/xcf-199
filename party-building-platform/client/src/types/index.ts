@@ -306,3 +306,91 @@ export interface VolunteerRanking {
   total_points: number
 }
 
+export type BranchMeetingType = 'branch_committee' | 'member_congress' | 'group_meeting' | 'party_lesson'
+
+export type BranchMeetingStatus = 'notified' | 'ongoing' | 'completed' | 'cancelled'
+
+export interface BranchMeeting {
+  id: number
+  title: string
+  branch: string
+  meeting_type: BranchMeetingType
+  location: string
+  meeting_time: string
+  end_time: string
+  status: BranchMeetingStatus
+  notification_content: string
+  minutes_content: string
+  created_by: number
+  created_at: string
+  updated_at: string
+  agendas?: BranchMeetingAgenda[]
+  attendees?: BranchMeetingAttendee[]
+  checkins?: BranchMeetingCheckin[]
+  resolutions?: BranchMeetingResolution[]
+  attendee_count?: number
+  checkin_count?: number
+  creator_name?: string
+}
+
+export interface BranchMeetingAgenda {
+  id: number
+  meeting_id: number
+  title: string
+  content: string
+  sort_order: number
+  status: 'pending' | 'discussed' | 'passed' | 'rejected'
+  discussion_result: string
+  created_at: string
+}
+
+export interface BranchMeetingAttendee {
+  id: number
+  meeting_id: number
+  user_id: number
+  is_required: number
+  status: 'pending' | 'confirmed' | 'leave' | 'unresponsive'
+  created_at: string
+  real_name?: string
+  phone?: string
+  branch?: string
+  avatar?: string
+  checked_in?: boolean
+}
+
+export interface BranchMeetingCheckin {
+  id: number
+  meeting_id: number
+  user_id: number
+  checkin_time: string
+  checkin_type: 'onsite' | 'online'
+  created_at: string
+  real_name?: string
+  avatar?: string
+}
+
+export interface BranchMeetingResolution {
+  id: number
+  meeting_id: number
+  agenda_id: number
+  title: string
+  content: string
+  result: 'passed' | 'rejected' | 'pending'
+  vote_for: number
+  vote_against: number
+  vote_abstain: number
+  resolved_at: string
+  created_at: string
+  agenda_title?: string
+}
+
+export interface BranchMeetingStats {
+  total_meetings: number
+  by_type: { type: string; count: number }[]
+  by_branch: { branch: string; count: number }[]
+  by_month: { month: string; count: number }[]
+  avg_attendance_rate: number
+  total_resolutions: number
+  passed_resolutions: number
+}
+

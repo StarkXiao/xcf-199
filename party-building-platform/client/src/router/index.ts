@@ -85,6 +85,18 @@ const router = createRouter({
           name: 'my-volunteer',
           component: () => import('@/views/MyVolunteer.vue'),
           meta: { title: '我的志愿服务', requiresAuth: true }
+        },
+        {
+          path: 'branch-meetings',
+          name: 'branch-meetings',
+          component: () => import('@/views/BranchMeetings.vue'),
+          meta: { title: '支部会议' }
+        },
+        {
+          path: 'branch-meetings/:id',
+          name: 'branch-meeting-detail',
+          component: () => import('@/views/BranchMeetingDetail.vue'),
+          meta: { title: '会议详情' }
         }
       ]
     },
@@ -152,6 +164,12 @@ const router = createRouter({
           name: 'admin-volunteer-stats',
           component: () => import('@/views/admin/VolunteerStats.vue'),
           meta: { title: '管理后台 - 志愿服务统计' }
+        },
+        {
+          path: 'branch-meetings',
+          name: 'admin-branch-meetings',
+          component: () => import('@/views/admin/BranchMeetings.vue'),
+          meta: { title: '管理后台 - 支部会议管理' }
         }
       ]
     },

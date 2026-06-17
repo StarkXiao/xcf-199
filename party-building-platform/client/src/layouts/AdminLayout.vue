@@ -38,6 +38,10 @@
           <span class="nav-icon">📊</span>
           <span class="nav-text">志愿统计</span>
         </router-link>
+        <router-link to="/admin/branch-meetings" class="nav-item" :class="{ active: $route.name === 'admin-branch-meetings' }">
+          <span class="nav-icon">📋</span>
+          <span class="nav-text">支部会议</span>
+        </router-link>
       </nav>
       <div class="sidebar-footer">
         <router-link to="/" class="back-link">← 返回前台</router-link>

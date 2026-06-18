@@ -139,6 +139,18 @@ const router = createRouter({
           name: 'my-certificates',
           component: () => import('@/views/MyCertificates.vue'),
           meta: { title: '证书荣誉', requiresAuth: true }
+        },
+        {
+          path: 'surveys',
+          name: 'surveys',
+          component: () => import('@/views/Surveys.vue'),
+          meta: { title: '调研问卷', requiresAuth: true }
+        },
+        {
+          path: 'surveys/:id',
+          name: 'survey-fill',
+          component: () => import('@/views/SurveyFill.vue'),
+          meta: { title: '填写问卷', requiresAuth: true }
         }
       ]
     },
@@ -266,6 +278,18 @@ const router = createRouter({
           name: 'admin-certificates',
           component: () => import('@/views/admin/Certificates.vue'),
           meta: { title: '管理后台 - 证书荣誉管理' }
+        },
+        {
+          path: 'surveys',
+          name: 'admin-surveys',
+          component: () => import('@/views/admin/Surveys.vue'),
+          meta: { title: '管理后台 - 调研问卷管理' }
+        },
+        {
+          path: 'surveys/:id/stats',
+          name: 'admin-survey-stats',
+          component: () => import('@/views/admin/SurveyStats.vue'),
+          meta: { title: '管理后台 - 问卷统计分析' }
         }
       ]
     },

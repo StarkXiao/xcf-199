@@ -20,6 +20,7 @@
           <router-link v-if="userStore.isLoggedIn" to="/party-transfer" class="nav-link" :class="{ active: $route.name === 'party-transfer' }">组织转接</router-link>
           <router-link v-if="userStore.isLoggedIn" to="/party-dues" class="nav-link" :class="{ active: $route.name === 'party-dues' || $route.name === 'party-dues-payments' }">党费缴纳</router-link>
           <router-link v-if="userStore.isLoggedIn" to="/my-certificates" class="nav-link" :class="{ active: $route.name === 'my-certificates' }">证书荣誉</router-link>
+          <router-link v-if="userStore.isLoggedIn" to="/surveys" class="nav-link" :class="{ active: $route.name === 'surveys' || $route.name === 'survey-fill' }">调研问卷</router-link>
         </nav>
         <div class="header-right">
           <template v-if="userStore.isLoggedIn">

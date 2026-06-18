@@ -39,6 +39,10 @@ let dbData = {
   democratic_review_form_items: [],
   democratic_review_scores: [],
   democratic_review_history: [],
+  surveys: [],
+  survey_questions: [],
+  survey_responses: [],
+  survey_response_answers: [],
   counters: {
     users: 0,
     articles: 0,
@@ -63,7 +67,11 @@ let dbData = {
     democratic_reviews: 0,
     democratic_review_form_items: 0,
     democratic_review_scores: 0,
-    democratic_review_history: 0
+    democratic_review_history: 0,
+    surveys: 0,
+    survey_questions: 0,
+    survey_responses: 0,
+    survey_response_answers: 0
   }
 };
 
@@ -502,6 +510,67 @@ async function initMySQL() {
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
         FOREIGN KEY (review_id) REFERENCES democratic_reviews(id) ON DELETE CASCADE,
         FOREIGN KEY (operator_id) REFERENCES users(id) ON DELETE SET NULL
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    `);
+
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS surveys (
+        id INTEGER PRIMARY KEY AUTO_INCREMENT,
+        title VARCHAR(500) NOT NULL,
+        description TEXT,
+        status VARCHAR(20) DEFAULT 'draft',
+        is_anonymous INTEGER DEFAULT 0,
+        start_date DATETIME,
+        end_date DATETIME,
+        target_type VARCHAR(20) DEFAULT 'all',
+        target_branches TEXT DEFAULT '[]',
+        target_user_ids TEXT DEFAULT '[]',
+        response_count INTEGER DEFAULT 0,
+        created_by INTEGER,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    `);
+
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS survey_questions (
+        id INTEGER PRIMARY KEY AUTO_INCREMENT,
+        survey_id INTEGER NOT NULL,
+        title VARCHAR(500) NOT NULL,
+        question_type VARCHAR(30) DEFAULT 'single_choice',
+        options TEXT DEFAULT '[]',
+        required INTEGER DEFAULT 1,
+        sort_order INTEGER DEFAULT 0,
+        max_rating INTEGER DEFAULT 5,
+        min_label VARCHAR(100) DEFAULT '',
+        max_label VARCHAR(100) DEFAULT '',
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (survey_id) REFERENCES surveys(id) ON DELETE CASCADE
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    `);
+
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS survey_responses (
+        id INTEGER PRIMARY KEY AUTO_INCREMENT,
+        survey_id INTEGER NOT NULL,
+        user_id INTEGER,
+        respondent_name VARCHAR(100) DEFAULT '',
+        submitted_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (survey_id) REFERENCES surveys(id) ON DELETE CASCADE,
+        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    `);
+
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS survey_response_answers (
+        id INTEGER PRIMARY KEY AUTO_INCREMENT,
+        response_id INTEGER NOT NULL,
+        question_id INTEGER NOT NULL,
+        answer_text TEXT DEFAULT '',
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (response_id) REFERENCES survey_responses(id) ON DELETE CASCADE,
+        FOREIGN KEY (question_id) REFERENCES survey_questions(id) ON DELETE CASCADE
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
     `);
 

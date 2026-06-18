@@ -485,6 +485,59 @@ function initDatabase() {
       updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
     );
+
+    CREATE TABLE IF NOT EXISTS surveys (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      title TEXT NOT NULL,
+      description TEXT,
+      status TEXT DEFAULT 'draft',
+      is_anonymous INTEGER DEFAULT 0,
+      start_date DATETIME,
+      end_date DATETIME,
+      target_type TEXT DEFAULT 'all',
+      target_branches TEXT DEFAULT '[]',
+      target_user_ids TEXT DEFAULT '[]',
+      response_count INTEGER DEFAULT 0,
+      created_by INTEGER,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS survey_questions (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      survey_id INTEGER NOT NULL,
+      title TEXT NOT NULL,
+      question_type TEXT DEFAULT 'single_choice',
+      options TEXT DEFAULT '[]',
+      required INTEGER DEFAULT 1,
+      sort_order INTEGER DEFAULT 0,
+      max_rating INTEGER DEFAULT 5,
+      min_label TEXT DEFAULT '',
+      max_label TEXT DEFAULT '',
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (survey_id) REFERENCES surveys(id) ON DELETE CASCADE
+    );
+
+    CREATE TABLE IF NOT EXISTS survey_responses (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      survey_id INTEGER NOT NULL,
+      user_id INTEGER,
+      respondent_name TEXT DEFAULT '',
+      submitted_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (survey_id) REFERENCES surveys(id) ON DELETE CASCADE,
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS survey_response_answers (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      response_id INTEGER NOT NULL,
+      question_id INTEGER NOT NULL,
+      answer_text TEXT DEFAULT '',
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (response_id) REFERENCES survey_responses(id) ON DELETE CASCADE,
+      FOREIGN KEY (question_id) REFERENCES survey_questions(id) ON DELETE CASCADE
+    );
   `);
 
   const adminHash = bcrypt.hashSync('admin123', 10);

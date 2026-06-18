@@ -1056,4 +1056,82 @@ export interface AchievementWithUser {
   user?: { id: number; real_name: string; avatar: string; branch: string }
 }
 
+export type SurveyStatus = 'draft' | 'published' | 'closed' | 'archived'
+export type SurveyQuestionType = 'single_choice' | 'multiple_choice' | 'text' | 'rating' | 'scale'
+
+export interface Survey {
+  id: number
+  title: string
+  description: string
+  status: SurveyStatus
+  is_anonymous: number
+  start_date: string
+  end_date: string
+  target_type: string
+  target_branches: string
+  target_user_ids: string
+  response_count: number
+  created_by: number
+  created_at: string
+  updated_at: string
+  creator_name?: string
+  questions?: SurveyQuestion[]
+  has_responded?: boolean
+}
+
+export interface SurveyQuestion {
+  id: number
+  survey_id: number
+  title: string
+  question_type: SurveyQuestionType
+  options: string
+  required: number
+  sort_order: number
+  max_rating: number
+  min_label: string
+  max_label: string
+  created_at: string
+}
+
+export interface SurveyResponse {
+  id: number
+  survey_id: number
+  user_id: number | null
+  respondent_name: string
+  submitted_at: string
+  answers?: SurveyResponseAnswer[]
+  real_name?: string
+  avatar?: string
+  branch?: string
+}
+
+export interface SurveyResponseAnswer {
+  id: number
+  response_id: number
+  question_id: number
+  answer_text: string
+  created_at: string
+  question_title?: string
+  question_type?: string
+}
+
+export interface SurveyStats {
+  total_surveys: number
+  published_surveys: number
+  closed_surveys: number
+  total_responses: number
+  by_status: { status: string; count: number }[]
+  by_month: { month: string; count: number }[]
+}
+
+export interface SurveyQuestionStats {
+  question_id: number
+  question_title: string
+  question_type: string
+  response_count: number
+  option_counts: { option: string; count: number }[]
+  avg_rating: number
+  text_answers: string[]
+}
+
 

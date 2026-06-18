@@ -80,6 +80,10 @@
           <span class="nav-icon">🏆</span>
           <span class="nav-text">证书荣誉管理</span>
         </router-link>
+        <router-link to="/admin/surveys" class="nav-item" :class="{ active: $route.name === 'admin-surveys' || $route.name === 'admin-survey-stats' }">
+          <span class="nav-icon">📋</span>
+          <span class="nav-text">调研问卷管理</span>
+        </router-link>
       </nav>
       <div class="sidebar-footer">
         <router-link to="/" class="back-link">← 返回前台</router-link>

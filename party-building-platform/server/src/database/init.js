@@ -1151,7 +1151,6 @@ function initDatabase() {
       late_fee DECIMAL(10,2) DEFAULT 0,
       total_amount DECIMAL(10,2) NOT NULL,
       reason TEXT NOT NULL,
-      reject_reason TEXT,
       payment_id INTEGER,
       status TEXT DEFAULT 'pending',
       approved_by INTEGER,
@@ -1313,20 +1312,6 @@ function initDatabase() {
   `);
 
   insertDuesHistory.run(1, null, null, 'generate', `系统自动生成${currentDate.getFullYear()}年度党费账单`, 1, '系统管理员');
-
-  const migrateDatabase = () => {
-    try {
-      const columns = db.prepare('PRAGMA table_info(party_dues_remediation)').all();
-      const hasRejectReason = columns.some(col => col.name === 'reject_reason');
-      if (!hasRejectReason) {
-        db.prepare('ALTER TABLE party_dues_remediation ADD COLUMN reject_reason TEXT').run();
-        console.log('迁移：已添加 reject_reason 字段到 party_dues_remediation 表');
-      }
-    } catch (err) {
-      console.log('迁移 party_dues_remediation 表时跳过：', err.message);
-    }
-  };
-  migrateDatabase();
 
   console.log('数据库初始化完成！');
   console.log('默认账号：admin / admin123 （管理员）');

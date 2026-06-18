@@ -929,13 +929,14 @@ export interface PartyDuesHistory {
 }
 
 export interface PartyDuesBillsStats {
+  year: number
   total_bills: number
   paid_bills: number
   unpaid_bills: number
   overdue_bills: number
-  total_amount: number
-  paid_amount: number
-  unpaid_amount: number
+  total_dues: number
+  total_paid: number
+  total_unpaid: number
 }
 
 export interface DuesStatsOverview extends PartyDuesStatsOverview {}

@@ -169,13 +169,13 @@ router.put('/rules/:id/toggle', authMiddleware, async (req, res) => {
         { status: newStatus, updated_at: now }
       );
     }
-    const updatedRule = await db.getOne(
-      'party_dues_rules',
-      r => r.id === parseInt(id),
-      'SELECT * FROM party_dues_rules WHERE id = ?',
-      [id]
-    );
-    res.json({ code: 200, message: '操作成功', data: updatedRule });
+    await db.insert('party_dues_history', {
+      action_type: 'toggle_rule',
+      action_detail: `${newStatus === 'active' ? '启用' : '禁用'}党费规则 ID:${id}`,
+      operator_id: req.user.id,
+      operator_name: req.user.real_name
+    });
+    res.json({ code: 200, message: '操作成功', data: { status: newStatus } });
   } catch (err) {
     console.error(err);
     res.status(500).json({ code: 500, message: '服务器内部错误', error: err.message });
@@ -440,14 +440,7 @@ router.post('/my/remediation', authMiddleware, async (req, res) => {
     );
 
     const income = userConfig?.monthly_income || 0;
-    let monthlyAmount = 0;
-
-    if (userConfig?.custom_dues_amount && userConfig?.dues_type === 'fixed') {
-      monthlyAmount = userConfig.custom_dues_amount;
-    } else {
-      const result = calculateDuesAmount(income, rules);
-      monthlyAmount = result.amount;
-    }
+    const { amount: monthlyAmount } = calculateDuesAmount(income, rules);
 
     let totalMonths = 0;
     for (let y = start_year; y <= end_year; y++) {
@@ -630,16 +623,7 @@ router.post('/admin/bills/generate', authMiddleware, async (req, res) => {
       if (userConfig?.is_exempt) continue;
 
       const income = userConfig?.monthly_income || 0;
-      let duesAmount = 0;
-      let ruleId = null;
-
-      if (userConfig?.custom_dues_amount && userConfig?.dues_type === 'fixed') {
-        duesAmount = userConfig.custom_dues_amount;
-      } else {
-        const result = calculateDuesAmount(income, activeRules);
-        duesAmount = result.amount;
-        ruleId = result.ruleId;
-      }
+      const { amount: duesAmount, ruleId } = calculateDuesAmount(income, activeRules);
 
       if (duesAmount <= 0) continue;
 
@@ -670,76 +654,7 @@ router.post('/admin/bills/generate', authMiddleware, async (req, res) => {
     res.json({ code: 200, message: '生成成功', data: { generated_count: generatedCount } });
   } catch (err) {
     console.error(err);
-    res.status(500).json({ code: 500, message: '服务器内部错误', error: err.message });
-  }
-});
-
-router.put('/admin/bills/:id/mark-paid', authMiddleware, async (req, res) => {
-  try {
-    if (req.user.role !== 'admin') {
-      return res.status(403).json({ code: 403, message: '无权限操作' });
-    }
-    const { id } = req.params;
-    const { payment_method, payment_reference, payment_date } = req.body;
-
-    const bill = await db.getOne(
-      'party_dues_bills',
-      b => b.id === parseInt(id),
-      'SELECT * FROM party_dues_bills WHERE id = ?',
-      [id]
-    );
-    if (!bill) {
-      return res.status(404).json({ code: 404, message: '账单不存在' });
-    }
-    if (bill.status === 'paid') {
-      return res.status(400).json({ code: 400, message: '账单已缴纳' });
-    }
-
-    const now = new Date().toISOString();
-    const payDate = payment_date || now.slice(0, 10);
-    const payMethod = payment_method || 'cash';
-    const payRef = payment_reference || '管理员手动标记';
-
-    if (db.useMySQL) {
-      await db.exec(
-        'UPDATE party_dues_bills SET status = ?, paid_amount = total_amount, paid_at = ?, payment_method = ?, payment_reference = ?, updated_at = ? WHERE id = ?',
-        ['paid', now, payMethod, payRef, now, id]
-      );
-    } else {
-      await db.update(
-        'party_dues_bills',
-        b => b.id === parseInt(id),
-        { status: 'paid', paid_amount: bill.total_amount, paid_at: now, payment_method: payMethod, payment_reference: payRef, updated_at: now }
-      );
-    }
-
-    await db.insert('party_dues_payments', {
-      user_id: bill.user_id,
-      bill_id: bill.id,
-      payment_date: payDate,
-      payment_amount: bill.total_amount,
-      payment_method: payMethod,
-      payment_reference: payRef,
-      bill_year: bill.bill_year,
-      bill_month: bill.bill_month,
-      late_fee: bill.late_fee || 0,
-      payer_name: '',
-      recorded_by: req.user.id,
-      status: 'confirmed'
-    });
-
-    await db.insert('party_dues_history', {
-      bill_id: bill.id,
-      action_type: 'admin_mark_paid',
-      action_detail: `管理员标记${bill.bill_year}年${bill.bill_month}月账单已缴纳，金额：${bill.total_amount}元`,
-      operator_id: req.user.id,
-      operator_name: req.user.real_name
-    });
-
-    res.json({ code: 200, message: '标记成功' });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ code: 500, message: '服务器内部错误', error: err.message });
+    res.status(500).json({ code:  500, message: '服务器内部错误', error: err.message });
   }
 });
 
@@ -761,21 +676,22 @@ router.get('/admin/bills/stats', authMiddleware, async (req, res) => {
     const paidBills = bills.filter(b => b.status === 'paid').length;
     const unpaidBills = bills.filter(b => b.status === 'unpaid').length;
     const overdueBills = bills.filter(b => b.status === 'overdue').length;
-    const totalAmount = bills.reduce((sum, b) => sum + b.total_amount, 0);
-    const paidAmount = bills.filter(b => b.status === 'paid').reduce((sum, b) => sum + b.total_amount, 0);
-    const unpaidAmount = bills.filter(b => b.status !== 'paid').reduce((sum, b) => sum + b.total_amount, 0);
+    const totalDues = bills.reduce((sum, b) => sum + (b.dues_amount || 0), 0);
+    const totalPaid = bills.filter(b => b.status === 'paid').reduce((sum, b) => sum + (b.dues_amount || 0), 0);
+    const totalUnpaid = bills.filter(b => b.status !== 'paid').reduce((sum, b) => sum + (b.total_amount || 0), 0);
 
     res.json({
       code: 200,
       message: '获取成功',
       data: {
+        year: parseInt(year),
         total_bills: totalBills,
         paid_bills: paidBills,
         unpaid_bills: unpaidBills,
         overdue_bills: overdueBills,
-        total_amount: totalAmount,
-        paid_amount: paidAmount,
-        unpaid_amount: unpaidAmount
+        total_dues: totalDues,
+        total_paid: totalPaid,
+        total_unpaid: totalUnpaid
       }
     });
   } catch (err) {
@@ -784,70 +700,70 @@ router.get('/admin/bills/stats', authMiddleware, async (req, res) => {
   }
 });
 
-router.get('/admin/bills/unpaid', authMiddleware, async (req, res) => {
+router.put('/admin/bills/:id/mark-paid', authMiddleware, async (req, res) => {
   try {
     if (req.user.role !== 'admin') {
       return res.status(403).json({ code: 403, message: '无权限操作' });
     }
-    const year = req.query.year;
-    const month = req.query.month;
-    const branch = req.query.branch;
+    const { id } = req.params;
+    const { payment_method, payment_reference, payment_date } = req.body;
 
-    let sql = `
-      SELECT b.*, u.real_name, u.branch, u.phone
-      FROM party_dues_bills b
-      LEFT JOIN users u ON b.user_id = u.id
-      WHERE b.status != 'paid'
-    `;
-    const params = [];
+    const bill = await db.getOne(
+      'party_dues_bills',
+      b => b.id === parseInt(id),
+      'SELECT * FROM party_dues_bills WHERE id = ?',
+      [id]
+    );
 
-    if (year) {
-      sql += ' AND b.bill_year = ?';
-      params.push(year);
-    }
-    if (month) {
-      sql += ' AND b.bill_month = ?';
-      params.push(month);
-    }
-    if (branch) {
-      sql += ' AND u.branch = ?';
-      params.push(branch);
+    if (!bill) {
+      return res.status(404).json({ code: 404, message: '账单不存在' });
     }
 
-    sql += ' ORDER BY b.bill_year DESC, b.bill_month DESC, u.branch, u.real_name';
+    const now = new Date().toISOString();
+    const payDate = payment_date || now.slice(0, 10);
 
-    let unpaidBills;
+    const paymentId = await db.insert('party_dues_payments', {
+      user_id: bill.user_id,
+      bill_id: bill.id,
+      payment_date: payDate,
+      payment_amount: bill.total_amount,
+      payment_method: payment_method || 'cash',
+      payment_reference: payment_reference || '管理员手动标记',
+      payer_name: '',
+      recorded_by: req.user.id,
+      status: 'confirmed'
+    });
+
     if (db.useMySQL) {
-      unpaidBills = await db.exec(sql, params);
+      await db.exec(
+        'UPDATE party_dues_bills SET status = ?, paid_amount = ?, paid_at = ?, payment_method = ?, payment_reference = ?, updated_at = ? WHERE id = ?',
+        ['paid', bill.total_amount, now, payment_method || 'cash', payment_reference || '管理员手动标记', now, id]
+      );
     } else {
-      const allBills = await db.getAll('party_dues_bills');
-      const users = await db.getAll('users');
-      unpaidBills = allBills
-        .filter(b => {
-          if (b.status === 'paid') return false;
-          if (year && b.bill_year !== parseInt(year)) return false;
-          if (month && b.bill_month !== parseInt(month)) return false;
-          const user = users.find(u => u.id === b.user_id);
-          if (branch && user?.branch !== branch) return false;
-          return true;
-        })
-        .map(b => {
-          const user = users.find(u => u.id === b.user_id);
-          return {
-            ...b,
-            real_name: user?.real_name,
-            branch: user?.branch,
-            phone: user?.phone
-          };
-        })
-        .sort((a, b) => {
-          if (a.bill_year !== b.bill_year) return b.bill_year - a.bill_year;
-          if (a.bill_month !== b.bill_month) return b.bill_month - a.bill_month;
-          return (a.branch || '').localeCompare(b.branch || '');
-        });
+      await db.update(
+        'party_dues_bills',
+        b => b.id === parseInt(id),
+        {
+          status: 'paid',
+          paid_amount: bill.total_amount,
+          paid_at: now,
+          payment_method: payment_method || 'cash',
+          payment_reference: payment_reference || '管理员手动标记',
+          updated_at: now
+        }
+      );
     }
 
-    res.json({ code: 200, message: '获取成功', data: unpaidBills });
+    await db.insert('party_dues_history', {
+      bill_id: parseInt(id),
+      payment_id: paymentId,
+      action_type: 'admin_mark_paid',
+      action_detail: `管理员标记${bill.bill_year}年${bill.bill_month}月账单已缴，金额：${bill.total_amount}元`,
+      operator_id: req.user.id,
+      operator_name: req.user.real_name
+    });
+
+    res.json({ code: 200, message: '标记成功', data: { payment_id: paymentId } });
   } catch (err) {
     console.error(err);
     res.status(500).json({ code: 500, message: '服务器内部错误', error: err.message });
@@ -1122,7 +1038,7 @@ router.put('/admin/remediations/:id/reject', authMiddleware, async (req, res) =>
     const { reject_reason } = req.body;
 
     if (!reject_reason) {
-      return res.status(400).json({ code: 400, message: '请填写拒绝原因' });
+      return res.status(400).json({ code: 400, message: '请输入拒绝原因' });
     }
 
     const remediation = await db.getOne(
@@ -1173,7 +1089,7 @@ router.get('/admin/remediations/stats', authMiddleware, async (req, res) => {
 
     let remediations;
     if (db.useMySQL) {
-      remediations = await db.exec('SELECT status FROM party_dues_remediation');
+      remediations = await db.exec('SELECT * FROM party_dues_remediation');
     } else {
       remediations = await db.getAll('party_dues_remediation');
     }
@@ -1470,81 +1386,91 @@ router.get('/admin/user-configs', authMiddleware, async (req, res) => {
       return res.status(403).json({ code: 403, message: '无权限操作' });
     }
     const page = parseInt(req.query.page) || 1;
-    const pageSize = parseInt(req.query.page_size) || config.pageSize;
+    const pageSize = parseInt(req.query.page_size) || 50;
     const keyword = req.query.keyword;
 
-    let sql = `
-      SELECT c.*, u.real_name, u.branch, u.phone, u.avatar
+    let baseSql = `
+      SELECT c.*, u.real_name, u.branch, u.phone, u.avatar, u.username
       FROM party_dues_user_config c
       LEFT JOIN users u ON c.user_id = u.id
       WHERE 1=1
     `;
-    const params = [];
     let countSql = `
       SELECT COUNT(*) as c
       FROM party_dues_user_config c
       LEFT JOIN users u ON c.user_id = u.id
       WHERE 1=1
     `;
+    const params = [];
     const countParams = [];
 
     if (keyword) {
-      sql += ' AND (u.real_name LIKE ? OR u.phone LIKE ? OR u.branch LIKE ?)';
-      countSql += ' AND (u.real_name LIKE ? OR u.phone LIKE ? OR u.branch LIKE ?)';
-      const kw = `%${keyword}%`;
-      params.push(kw, kw, kw);
-      countParams.push(kw, kw, kw);
+      baseSql += ' AND (u.real_name LIKE ? OR u.username LIKE ? OR u.phone LIKE ?)';
+      countSql += ' AND (u.real_name LIKE ? OR u.username LIKE ? OR u.phone LIKE ?)';
+      params.push(`%${keyword}%`, `%${keyword}%`, `%${keyword}%`);
+      countParams.push(`%${keyword}%`, `%${keyword}%`, `%${keyword}%`);
     }
 
-    sql += ' ORDER BY u.branch, u.real_name';
+    baseSql += ' ORDER BY u.branch, u.real_name';
 
-    const predicate = (c) => {
-      if (!keyword) return true;
-      const kw = keyword.toLowerCase();
-      return (
-        (c.real_name && c.real_name.toLowerCase().includes(kw)) ||
-        (c.phone && c.phone.toLowerCase().includes(kw)) ||
-        (c.branch && c.branch.toLowerCase().includes(kw))
-      );
-    };
+    let configs;
+    let total;
 
-    const result = await db.paginate('party_dues_user_config', {
-      page,
-      page_size: pageSize,
-      predicate,
-      sortBy: 'user_id',
-      sortOrder: 'asc',
-      sql,
-      sqlParams: params,
-      countSql,
-      countParams
-    });
-
-    let list;
     if (db.useMySQL) {
-      list = result.list;
+      const countResult = await db.exec(countSql, countParams);
+      total = countResult[0]?.c || 0;
+      const offset = (page - 1) * pageSize;
+      baseSql += ' LIMIT ? OFFSET ?';
+      params.push(pageSize, offset);
+      configs = await db.exec(baseSql, params);
     } else {
+      const allConfigs = await db.getAll('party_dues_user_config');
       const users = await db.getAll('users');
-      list = result.list.map(c => {
+      configs = allConfigs.map(c => {
         const user = users.find(u => u.id === c.user_id);
         return {
           ...c,
           real_name: user?.real_name,
           branch: user?.branch,
           phone: user?.phone,
-          avatar: user?.avatar
+          avatar: user?.avatar,
+          username: user?.username,
+          user: user ? {
+            id: user.id,
+            real_name: user.real_name,
+            branch: user.branch,
+            phone: user.phone,
+            avatar: user.avatar,
+            username: user.username
+          } : null
         };
       });
-      list.sort((a, b) => {
+      if (keyword) {
+        const kw = keyword.toLowerCase();
+        configs = configs.filter(c =>
+          (c.real_name || '').toLowerCase().includes(kw) ||
+          (c.username || '').toLowerCase().includes(kw) ||
+          (c.phone || '').toLowerCase().includes(kw)
+        );
+      }
+      configs.sort((a, b) => {
         if (a.branch !== b.branch) return (a.branch || '').localeCompare(b.branch || '');
         return (a.real_name || '').localeCompare(b.real_name || '');
       });
+      total = configs.length;
+      const start = (page - 1) * pageSize;
+      configs = configs.slice(start, start + pageSize);
     }
 
     res.json({
       code: 200,
       message: '获取成功',
-      data: { list, total: result.total, page, page_size: pageSize }
+      data: {
+        list: configs,
+        total,
+        page,
+        page_size: pageSize
+      }
     });
   } catch (err) {
     console.error(err);
@@ -1552,38 +1478,86 @@ router.get('/admin/user-configs', authMiddleware, async (req, res) => {
   }
 });
 
-router.delete('/admin/user-configs/:user_id', authMiddleware, async (req, res) => {
+router.post('/admin/user-configs', authMiddleware, async (req, res) => {
   try {
     if (req.user.role !== 'admin') {
       return res.status(403).json({ code: 403, message: '无权限操作' });
     }
-    const { user_id } = req.params;
+    const { user_id, monthly_income, custom_dues_amount, dues_type, exemption_reason, is_exempt, effective_date } = req.body;
+
+    if (!user_id) {
+      return res.status(400).json({ code: 400, message: '请选择用户' });
+    }
+
+    const existing = db.useMySQL
+      ? (await db.exec('SELECT * FROM party_dues_user_config WHERE user_id = ?', [user_id]))[0]
+      : await db.getOne('party_dues_user_config', c => c.user_id === parseInt(user_id));
+
+    if (existing) {
+      return res.status(400).json({ code: 400, message: '该用户已存在特殊配置' });
+    }
+
+    const now = new Date().toISOString();
+    const id = await db.insert('party_dues_user_config', {
+      user_id: parseInt(user_id),
+      monthly_income: monthly_income || null,
+      custom_dues_amount: custom_dues_amount || null,
+      dues_type: dues_type || 'normal',
+      exemption_reason: exemption_reason || '',
+      is_exempt: is_exempt || 0,
+      effective_date: effective_date || now.slice(0, 10),
+      created_by: req.user.id
+    });
+
+    const config = await db.getOne(
+      'party_dues_user_config',
+      c => c.id === id,
+      'SELECT * FROM party_dues_user_config WHERE id = ?',
+      [id]
+    );
+
+    await db.insert('party_dues_history', {
+      action_type: 'create_user_config',
+      action_detail: `创建用户党费特殊配置，用户ID:${user_id}`,
+      operator_id: req.user.id,
+      operator_name: req.user.real_name
+    });
+
+    res.json({ code: 200, message: '创建成功', data: config });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ code: 500, message: '服务器内部错误', error: err.message });
+  }
+});
+
+router.delete('/admin/user-configs/:id', authMiddleware, async (req, res) => {
+  try {
+    if (req.user.role !== 'admin') {
+      return res.status(403).json({ code: 403, message: '无权限操作' });
+    }
+    const { id } = req.params;
 
     const existing = await db.getOne(
       'party_dues_user_config',
-      c => c.user_id === parseInt(user_id),
-      'SELECT * FROM party_dues_user_config WHERE user_id = ?',
-      [user_id]
+      c => c.id === parseInt(id),
+      'SELECT * FROM party_dues_user_config WHERE id = ?',
+      [id]
     );
 
     if (!existing) {
       return res.status(404).json({ code: 404, message: '配置不存在' });
     }
 
-    if (db.useMySQL) {
-      await db.exec('DELETE FROM party_dues_user_config WHERE user_id = ?', [user_id]);
-    } else {
-      await db.delete(
-        'party_dues_user_config',
-        c => c.user_id === parseInt(user_id),
-        'DELETE FROM party_dues_user_config WHERE user_id = ?',
-        [user_id]
-      );
-    }
+    await db.delete(
+      'party_dues_user_config',
+      c => c.id === parseInt(id),
+      'DELETE FROM party_dues_user_config WHERE id = ?',
+      [id]
+    );
 
     await db.insert('party_dues_history', {
       action_type: 'delete_user_config',
-      action_detail: `删除用户 ${user_id} 的党费特殊配置`,
+      action_detail: `删除用户党费特殊配置 ID:${id}`,
       operator_id: req.user.id,
       operator_name: req.user.real_name
     });

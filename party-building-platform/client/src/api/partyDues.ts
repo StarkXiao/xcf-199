@@ -208,15 +208,15 @@ export const getDuesUserConfigs = (params?: { page?: number; page_size?: number;
 }
 
 export const createDuesUserConfig = (data: Partial<PartyDuesUserConfig>) => {
-  return request.put<any, ApiResponse<PartyDuesUserConfig>>(`/party-dues/admin/user-configs/${data.user_id}`, data)
+  return request.post<any, ApiResponse<PartyDuesUserConfig>>('/party-dues/admin/user-configs', data)
 }
 
-export const updateDuesUserConfig = (userId: number, data: Partial<PartyDuesUserConfig>) => {
-  return request.put<any, ApiResponse<PartyDuesUserConfig>>(`/party-dues/admin/user-configs/${userId}`, data)
+export const updateDuesUserConfig = (id: number, data: Partial<PartyDuesUserConfig>) => {
+  return request.put<any, ApiResponse<PartyDuesUserConfig>>(`/party-dues/admin/user-configs/${id}`, data)
 }
 
-export const deleteDuesUserConfig = (userId: number) => {
-  return request.delete<any, ApiResponse<null>>(`/party-dues/admin/user-configs/${userId}`)
+export const deleteDuesUserConfig = (id: number) => {
+  return request.delete<any, ApiResponse<null>>(`/party-dues/admin/user-configs/${id}`)
 }
 
 export const getUsers = (params?: { keyword?: string; role?: string }) => {

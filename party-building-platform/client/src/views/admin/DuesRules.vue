@@ -29,9 +29,10 @@
         <thead>
           <tr>
             <th style="width: 60px;">ID</th>
+            <th>规则名称</th>
             <th>收入范围（元）</th>
             <th>缴纳比例</th>
-            <th>党员类型</th>
+            <th>计算方式</th>
             <th style="width: 100px;">是否启用</th>
             <th style="width: 140px;">更新时间</th>
             <th style="width: 150px;">操作</th>
@@ -40,16 +41,17 @@
         <tbody>
           <tr v-for="rule in rules" :key="rule.id">
             <td>{{ rule.id }}</td>
+            <td>{{ rule.rule_name || '-' }}</td>
             <td>{{ rule.income_min || 0 }} - {{ rule.income_max || '不限' }}</td>
-            <td><span class="rate-badge">{{ ((rule.rate || rule.dues_rate) * 100).toFixed(1) }}%</span></td>
+            <td><span class="rate-badge">{{ (rule.dues_rate * 100).toFixed(1) }}%</span></td>
             <td>
-              <span class="type-badge" :class="rule.member_type || rule.calculation_method">
-                {{ (rule.member_type || rule.calculation_method) === 'retired' ? '离退休党员' : '正式党员' }}
+              <span class="type-badge" :class="rule.calculation_method">
+                {{ rule.calculation_method === 'fixed' ? '固定金额' : ((rule.calculation_method as string) === 'retired' ? '离退休党员' : '正式党员') }}
               </span>
             </td>
             <td>
-              <span class="status-tag" :class="{ active: rule.is_active || rule.status === 'active' }">
-                {{ rule.is_active || rule.status === 'active' ? '✓ 启用' : '✗ 禁用' }}
+              <span class="status-tag" :class="{ active: rule.status === 'active' }">
+                {{ rule.status === 'active' ? '✓ 启用' : '✗ 禁用' }}
               </span>
             </td>
             <td>{{ formatDate(rule.updated_at) }}</td>
@@ -57,11 +59,11 @@
               <button class="btn btn-sm btn-secondary" @click="handleEdit(rule)">编辑</button>
               <button 
                 class="btn btn-sm" 
-                :class="(rule.is_active || rule.status === 'active') ? 'btn-warning' : 'btn-success'" 
+                :class="rule.status === 'active' ? 'btn-warning' : 'btn-success'" 
                 @click="handleToggle(rule)"
                 style="margin-left: 6px;"
               >
-                {{ rule.is_active || rule.status === 'active' ? '禁用' : '启用' }}
+                {{ rule.status === 'active' ? '禁用' : '启用' }}
               </button>
             </td>
           </tr>
@@ -101,26 +103,32 @@
         <table class="data-table">
           <thead>
             <tr>
-              <th style="width: 80px;">用户ID</th>
+              <th style="width: 80px;">ID</th>
               <th>党员姓名</th>
               <th>所属支部</th>
               <th>月收入（元）</th>
-              <th>固定金额（元）</th>
-              <th style="width: 100px;">是否启用</th>
+              <th>自定义金额（元）</th>
+              <th>缴费类型</th>
+              <th style="width: 100px;">是否减免</th>
               <th style="width: 140px;">更新时间</th>
               <th style="width: 150px;">操作</th>
             </tr>
           </thead>
           <tbody>
             <tr v-for="config in userConfigs" :key="config.id">
-              <td>{{ config.user_id }}</td>
+              <td>{{ config.id }}</td>
               <td>{{ config.real_name || config.user?.real_name || '-' }}</td>
               <td>{{ config.branch || config.user?.branch || '-' }}</td>
               <td>{{ config.monthly_income ? config.monthly_income.toFixed(2) : '-' }}</td>
-              <td>{{ (config.fixed_amount || config.custom_dues_amount) ? (config.fixed_amount || config.custom_dues_amount)!.toFixed(2) : '-' }}</td>
+              <td>{{ config.custom_dues_amount ? config.custom_dues_amount.toFixed(2) : '-' }}</td>
               <td>
-                <span class="status-tag" :class="{ active: config.is_active || config.is_exempt === 0 }">
-                  {{ config.is_active || config.is_exempt === 0 ? '✓ 启用' : '✗ 禁用' }}
+                <span class="type-badge" :class="config.dues_type">
+                  {{ config.dues_type === 'exempt' ? '减免' : (config.dues_type === 'fixed' ? '固定金额' : '按收入计算') }}
+                </span>
+              </td>
+              <td>
+                <span class="status-tag" :class="{ active: config.is_exempt === 1 }">
+                  {{ config.is_exempt === 1 ? '✓ 已减免' : '正常缴费' }}
                 </span>
               </td>
               <td>{{ formatDate(config.updated_at) }}</td>
@@ -145,6 +153,10 @@
           <button class="close-btn" @click="closeModal">×</button>
         </div>
         <div class="modal-body">
+          <div class="form-group">
+            <label class="form-label">规则名称 *</label>
+            <input v-model="ruleForm.rule_name" type="text" class="form-input" placeholder="例如：3000元以下档">
+          </div>
           <div class="form-row">
             <div class="form-group">
               <label class="form-label">最低收入（元）*</label>
@@ -158,15 +170,29 @@
           <div class="form-row">
             <div class="form-group">
               <label class="form-label">缴纳比例（%）*</label>
-              <input v-model.number="ruleForm.rate" type="number" step="0.1" class="form-input" placeholder="0.5">
+              <input v-model.number="ruleForm.dues_rate_percent" type="number" step="0.1" class="form-input" placeholder="0.5">
               <small class="form-hint">例如：0.5 表示 0.5%</small>
             </div>
             <div class="form-group">
-              <label class="form-label">党员类型*</label>
-              <select v-model="ruleForm.member_type" class="form-input">
-                <option value="regular">正式党员</option>
-                <option value="retired">离退休党员</option>
+              <label class="form-label">计算方式 *</label>
+              <select v-model="ruleForm.calculation_method" class="form-input">
+                <option value="percentage">按比例计算</option>
+                <option value="fixed">固定金额</option>
               </select>
+            </div>
+          </div>
+          <div v-if="ruleForm.calculation_method === 'fixed'" class="form-group">
+            <label class="form-label">固定金额（元）*</label>
+            <input v-model.number="ruleForm.fixed_amount" type="number" step="0.01" class="form-input" placeholder="例如：20">
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label">生效日期 *</label>
+              <input v-model="ruleForm.effective_date" type="date" class="form-input">
+            </div>
+            <div class="form-group">
+              <label class="form-label">失效日期</label>
+              <input v-model="ruleForm.expiry_date" type="date" class="form-input" placeholder="选填">
             </div>
           </div>
           <div class="form-group">
@@ -175,7 +201,7 @@
           </div>
           <div class="form-group">
             <label class="form-checkbox">
-              <input type="checkbox" v-model="ruleForm.is_active">
+              <input type="checkbox" v-model="ruleForm.status_active">
               <span>启用此规则</span>
             </label>
           </div>
@@ -206,19 +232,35 @@
             </select>
           </div>
           <div class="form-group">
+            <label class="form-label">缴费类型</label>
+            <select v-model="userConfigForm.dues_type" class="form-input">
+              <option value="normal">按收入计算（默认）</option>
+              <option value="fixed">固定金额</option>
+              <option value="exempt">减免党费</option>
+            </select>
+          </div>
+          <div v-if="userConfigForm.dues_type !== 'exempt'" class="form-group">
             <label class="form-label">月收入（元）</label>
             <input v-model.number="userConfigForm.monthly_income" type="number" class="form-input" placeholder="用于计算缴费基数">
             <small class="form-hint">设置此项将按照规则自动计算缴费金额</small>
           </div>
-          <div class="form-group">
+          <div v-if="userConfigForm.dues_type === 'fixed'" class="form-group">
             <label class="form-label">固定缴费金额（元）</label>
-            <input v-model.number="userConfigForm.fixed_amount" type="number" class="form-input" placeholder="每月固定缴纳金额">
+            <input v-model.number="userConfigForm.custom_dues_amount" type="number" step="0.01" class="form-input" placeholder="每月固定缴纳金额">
             <small class="form-hint">设置此项将忽略收入计算，直接使用固定金额</small>
+          </div>
+          <div v-if="userConfigForm.dues_type === 'exempt'" class="form-group">
+            <label class="form-label">减免原因</label>
+            <textarea v-model="userConfigForm.exemption_reason" class="form-input" rows="2" placeholder="请说明减免党费的原因"></textarea>
+          </div>
+          <div class="form-group">
+            <label class="form-label">生效日期</label>
+            <input v-model="userConfigForm.effective_date" type="date" class="form-input">
           </div>
           <div class="form-group">
             <label class="form-checkbox">
-              <input type="checkbox" v-model="userConfigForm.is_active">
-              <span>启用此配置</span>
+              <input type="checkbox" v-model="userConfigForm.is_exempt_check">
+              <span>标记为减免党费</span>
             </label>
           </div>
         </div>
@@ -264,20 +306,32 @@ const showAddUserModal = ref(false)
 const showEditUserModal = ref(false)
 const editingUserConfig = ref<PartyDuesUserConfig | null>(null)
 
+const getDefaultEffectiveDate = () => {
+  const today = new Date()
+  return `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`
+}
+
 const ruleForm = ref({
+  rule_name: '',
   income_min: 0,
   income_max: null as number | null,
-  rate: 0,
-  member_type: 'regular',
+  dues_rate_percent: 0.5,
+  calculation_method: 'percentage' as 'percentage' | 'fixed',
+  fixed_amount: null as number | null,
+  effective_date: getDefaultEffectiveDate(),
+  expiry_date: '' as string,
   description: '',
-  is_active: true
+  status_active: true
 })
 
 const userConfigForm = ref({
   user_id: null as number | null,
   monthly_income: null as number | null,
-  fixed_amount: null as number | null,
-  is_active: true
+  custom_dues_amount: null as number | null,
+  dues_type: 'normal' as 'normal' | 'fixed' | 'exempt',
+  exemption_reason: '',
+  is_exempt_check: false,
+  effective_date: getDefaultEffectiveDate()
 })
 
 const loadRules = async () => {
@@ -295,7 +349,7 @@ const loadRules = async () => {
 const loadUserConfigs = async () => {
   userConfigsLoading.value = true
   try {
-    const params: any = {}
+    const params: any = { page: 1, page_size: 100 }
     if (userKeyword.value) params.keyword = userKeyword.value
     const res = await getDuesUserConfigs(params)
     const data = res.data as any
@@ -319,18 +373,22 @@ const loadUserOptions = async () => {
 const handleEdit = (rule: PartyDuesRule) => {
   editingRule.value = rule
   ruleForm.value = {
+    rule_name: rule.rule_name,
     income_min: rule.income_min,
     income_max: rule.income_max,
-    rate: (rule.rate || rule.dues_rate) * 100,
-    member_type: rule.member_type || rule.calculation_method || 'regular',
+    dues_rate_percent: rule.dues_rate * 100,
+    calculation_method: rule.calculation_method || 'percentage',
+    fixed_amount: rule.fixed_amount,
+    effective_date: rule.effective_date ? rule.effective_date.slice(0, 10) : getDefaultEffectiveDate(),
+    expiry_date: rule.expiry_date ? rule.expiry_date.slice(0, 10) : '',
     description: rule.description || '',
-    is_active: rule.is_active ? true : rule.status === 'active'
+    status_active: rule.status === 'active'
   }
   showEditModal.value = true
 }
 
 const handleToggle = async (rule: PartyDuesRule) => {
-  const isActive = rule.is_active ? true : rule.status === 'active'
+  const isActive = rule.status === 'active'
   try {
     await toggleDuesRule(rule.id)
     alert(isActive ? '已禁用' : '已启用')
@@ -345,30 +403,55 @@ const closeModal = () => {
   showEditModal.value = false
   editingRule.value = null
   ruleForm.value = {
+    rule_name: '',
     income_min: 0,
     income_max: null,
-    rate: 0,
-    member_type: 'regular',
+    dues_rate_percent: 0.5,
+    calculation_method: 'percentage',
+    fixed_amount: null,
+    effective_date: getDefaultEffectiveDate(),
+    expiry_date: '',
     description: '',
-    is_active: true
+    status_active: true
   }
 }
 
 const submitRule = async () => {
-  if (!ruleForm.value.rate || ruleForm.value.rate <= 0) {
-    alert('请输入有效的缴纳比例')
+  if (!ruleForm.value.rule_name.trim()) {
+    alert('请输入规则名称')
     return
   }
-  
+  if (ruleForm.value.calculation_method === 'percentage') {
+    if (!ruleForm.value.dues_rate_percent || ruleForm.value.dues_rate_percent <= 0) {
+      alert('请输入有效的缴纳比例')
+      return
+    }
+  } else if (ruleForm.value.calculation_method === 'fixed') {
+    if (!ruleForm.value.fixed_amount || ruleForm.value.fixed_amount <= 0) {
+      alert('请输入有效的固定金额')
+      return
+    }
+  }
+  if (!ruleForm.value.effective_date) {
+    alert('请选择生效日期')
+    return
+  }
+
   submitting.value = true
   try {
-    const data = {
-      ...ruleForm.value,
-      dues_rate: ruleForm.value.rate / 100,
-      rate: ruleForm.value.rate / 100,
-      is_active: ruleForm.value.is_active ? 1 : 0
-    } as any
-    
+    const data: Partial<PartyDuesRule> = {
+      rule_name: ruleForm.value.rule_name.trim(),
+      income_min: ruleForm.value.income_min,
+      income_max: ruleForm.value.income_max,
+      dues_rate: ruleForm.value.calculation_method === 'percentage' ? ruleForm.value.dues_rate_percent / 100 : 0,
+      fixed_amount: ruleForm.value.calculation_method === 'fixed' ? ruleForm.value.fixed_amount : null,
+      calculation_method: ruleForm.value.calculation_method,
+      effective_date: ruleForm.value.effective_date,
+      expiry_date: ruleForm.value.expiry_date || null,
+      status: ruleForm.value.status_active ? 'active' : 'inactive',
+      description: ruleForm.value.description
+    }
+
     if (showEditModal.value && editingRule.value) {
       await updateDuesRule(editingRule.value.id, data)
       alert('更新成功')
@@ -390,8 +473,11 @@ const handleEditUser = (config: PartyDuesUserConfig) => {
   userConfigForm.value = {
     user_id: config.user_id,
     monthly_income: config.monthly_income,
-    fixed_amount: config.fixed_amount || config.custom_dues_amount,
-    is_active: config.is_active ? true : config.is_exempt === 0
+    custom_dues_amount: config.custom_dues_amount,
+    dues_type: (config.dues_type as any) || 'normal',
+    exemption_reason: config.exemption_reason || '',
+    is_exempt_check: config.is_exempt === 1,
+    effective_date: config.effective_date ? config.effective_date.slice(0, 10) : getDefaultEffectiveDate()
   }
   showEditUserModal.value = true
 }
@@ -399,7 +485,7 @@ const handleEditUser = (config: PartyDuesUserConfig) => {
 const handleDeleteUser = async (config: PartyDuesUserConfig) => {
   if (!confirm('确定要删除此配置吗？')) return
   try {
-    await deleteDuesUserConfig(config.user_id)
+    await deleteDuesUserConfig(config.id)
     alert('删除成功')
     loadUserConfigs()
   } catch (error: any) {
@@ -414,8 +500,11 @@ const closeUserModal = () => {
   userConfigForm.value = {
     user_id: null,
     monthly_income: null,
-    fixed_amount: null,
-    is_active: true
+    custom_dues_amount: null,
+    dues_type: 'normal',
+    exemption_reason: '',
+    is_exempt_check: false,
+    effective_date: getDefaultEffectiveDate()
   }
 }
 
@@ -424,21 +513,31 @@ const submitUserConfig = async () => {
     alert('请选择党员')
     return
   }
-  
+  if (userConfigForm.value.dues_type === 'fixed' && (!userConfigForm.value.custom_dues_amount || userConfigForm.value.custom_dues_amount <= 0)) {
+    alert('请输入有效的固定金额')
+    return
+  }
+
   submitting.value = true
   try {
-    const data = {
+    const isExempt = userConfigForm.value.is_exempt_check || userConfigForm.value.dues_type === 'exempt' ? 1 : 0
+    const data: any = {
       user_id: userConfigForm.value.user_id,
-      monthly_income: userConfigForm.value.monthly_income || 0,
-      custom_dues_amount: userConfigForm.value.fixed_amount || null,
-      is_exempt: userConfigForm.value.is_active ? 0 : 1,
-      dues_type: userConfigForm.value.fixed_amount ? 'fixed' : 'regular',
-      effective_date: new Date().toISOString().slice(0, 10)
-    } as any
-    
-    const userId = userConfigForm.value.user_id!
-    await updateDuesUserConfig(userId, data)
-    alert('保存成功')
+      monthly_income: userConfigForm.value.monthly_income || null,
+      custom_dues_amount: userConfigForm.value.custom_dues_amount || null,
+      dues_type: userConfigForm.value.dues_type,
+      exemption_reason: userConfigForm.value.exemption_reason || '',
+      is_exempt: isExempt,
+      effective_date: userConfigForm.value.effective_date
+    }
+
+    if (showEditUserModal.value && editingUserConfig.value) {
+      await updateDuesUserConfig(editingUserConfig.value.user_id, data as any)
+      alert('更新成功')
+    } else {
+      await createDuesUserConfig(data as any)
+      alert('添加成功')
+    }
     closeUserModal()
     loadUserConfigs()
   } catch (error: any) {

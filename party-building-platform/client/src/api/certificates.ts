@@ -110,3 +110,27 @@ export const getCertificateStats = () => {
 export const getCertificateRanking = (params?: { limit?: number }) => {
   return request.get<any, ApiResponse<CertificateRanking[]>>('/certificates/stats/ranking', { params })
 }
+
+export const uploadCertificateImage = (file: File) => {
+  const formData = new FormData()
+  formData.append('file', file)
+  return request.post<any, ApiResponse<{ url: string; filename: string; size: number }>>(
+    '/certificates/upload/image',
+    formData,
+    {
+      headers: { 'Content-Type': 'multipart/form-data' }
+    }
+  )
+}
+
+export const uploadAchievementAttachment = (file: File) => {
+  const formData = new FormData()
+  formData.append('file', file)
+  return request.post<any, ApiResponse<{ url: string; filename: string; size: number }>>(
+    '/certificates/upload/attachment',
+    formData,
+    {
+      headers: { 'Content-Type': 'multipart/form-data' }
+    }
+  )
+}

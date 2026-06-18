@@ -280,12 +280,36 @@
               <textarea v-model="certForm.description" rows="3" placeholder="请输入证书描述"></textarea>
             </div>
             <div class="form-group full-width">
-              <label>封面图片URL</label>
-              <input v-model="certForm.cover_image" type="text" placeholder="请输入封面图片链接" />
+              <label>封面图片</label>
+              <div class="upload-field">
+                <div class="upload-preview" v-if="certForm.cover_image">
+                  <img :src="certForm.cover_image.startsWith('/') ? 'http://localhost:3000' + certForm.cover_image : certForm.cover_image" alt="封面预览">
+                </div>
+                <div class="upload-controls">
+                  <input v-model="certForm.cover_image" type="text" placeholder="输入图片URL或选择文件上传" />
+                  <label class="btn btn-secondary upload-btn" :class="{ disabled: uploadingCover }">
+                    <span v-if="uploadingCover">上传中...</span>
+                    <span v-else>📁 选择文件</span>
+                    <input type="file" accept="image/*" :disabled="uploadingCover" @change="handleCoverImageUpload" style="display:none;" />
+                  </label>
+                </div>
+              </div>
             </div>
             <div class="form-group full-width">
-              <label>证书图片URL</label>
-              <input v-model="certForm.certificate_image" type="text" placeholder="请输入证书图片链接" />
+              <label>证书图片</label>
+              <div class="upload-field">
+                <div class="upload-preview" v-if="certForm.certificate_image">
+                  <img :src="certForm.certificate_image.startsWith('/') ? 'http://localhost:3000' + certForm.certificate_image : certForm.certificate_image" alt="证书预览">
+                </div>
+                <div class="upload-controls">
+                  <input v-model="certForm.certificate_image" type="text" placeholder="输入图片URL或选择文件上传" />
+                  <label class="btn btn-secondary upload-btn" :class="{ disabled: uploadingCertImage }">
+                    <span v-if="uploadingCertImage">上传中...</span>
+                    <span v-else>📁 选择文件</span>
+                    <input type="file" accept="image/*" :disabled="uploadingCertImage" @change="handleCertImageUpload" style="display:none;" />
+                  </label>
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -406,7 +430,8 @@ import {
   deleteCertificate as delCertificate,
   getCertificateIssuances,
   issueCertificate as issueCert,
-  revokeCertificateIssuance
+  revokeCertificateIssuance,
+  uploadCertificateImage
 } from '@/api/certificates'
 import { getUsers } from '@/api/users'
 import type {
@@ -468,6 +493,47 @@ const issueForm = ref({
   issue_date: '',
   remarks: ''
 })
+
+const uploadingCover = ref(false)
+const uploadingCertImage = ref(false)
+
+const handleCoverImageUpload = async (event: Event) => {
+  const input = event.target as HTMLInputElement
+  const file = input.files?.[0]
+  if (!file) return
+
+  uploadingCover.value = true
+  try {
+    const res = await uploadCertificateImage(file)
+    certForm.value.cover_image = res.data.url
+    alert('封面图片上传成功')
+  } catch (error: any) {
+    console.error('上传失败', error)
+    alert(error.response?.data?.message || '封面图片上传失败')
+  } finally {
+    uploadingCover.value = false
+    if (input) input.value = ''
+  }
+}
+
+const handleCertImageUpload = async (event: Event) => {
+  const input = event.target as HTMLInputElement
+  const file = input.files?.[0]
+  if (!file) return
+
+  uploadingCertImage.value = true
+  try {
+    const res = await uploadCertificateImage(file)
+    certForm.value.certificate_image = res.data.url
+    alert('证书图片上传成功')
+  } catch (error: any) {
+    console.error('上传失败', error)
+    alert(error.response?.data?.message || '证书图片上传失败')
+  } finally {
+    uploadingCertImage.value = false
+    if (input) input.value = ''
+  }
+}
 
 const loadStats = async () => {
   try {
@@ -1185,6 +1251,52 @@ onMounted(() => {
 .issuances-table-container {
   max-height: 400px;
   overflow-y: auto;
+}
+
+.upload-field {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.upload-preview {
+  width: 100%;
+  max-width: 200px;
+  border: 2px dashed var(--border-color);
+  border-radius: var(--radius-md);
+  padding: 8px;
+  background: var(--bg-light);
+}
+
+.upload-preview img {
+  width: 100%;
+  height: auto;
+  border-radius: var(--radius-sm);
+  display: block;
+}
+
+.upload-controls {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
+.upload-controls input {
+  flex: 1;
+}
+
+.upload-btn {
+  cursor: pointer;
+  white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  user-select: none;
+}
+
+.upload-btn.disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
 }
 
 @media (max-width: 768px) {

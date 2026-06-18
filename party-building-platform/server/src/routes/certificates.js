@@ -1,9 +1,63 @@
 const express = require('express');
+const multer = require('multer');
+const path = require('path');
+const fs = require('fs');
 const db = require('../database');
 const config = require('../config');
 const { authMiddleware, optionalAuthMiddleware, adminMiddleware } = require('../middleware/auth');
 
 const router = express.Router();
+
+const getStorage = (folder) => {
+  return multer.diskStorage({
+    destination: (req, file, cb) => {
+      const uploadDir = path.join(__dirname, '../../uploads', folder);
+      if (!fs.existsSync(uploadDir)) {
+        fs.mkdirSync(uploadDir, { recursive: true });
+      }
+      cb(null, uploadDir);
+    },
+    filename: (req, file, cb) => {
+      const ext = path.extname(file.originalname);
+      const timestamp = Date.now();
+      const random = Math.floor(Math.random() * 1000);
+      const safeName = file.originalname.replace(/[\\/:*?"<>|]/g, '_');
+      cb(null, `${timestamp}_${random}_${safeName}`);
+    }
+  });
+};
+
+const createImageUpload = () => multer({
+  storage: getStorage('certificates'),
+  limits: { fileSize: 10 * 1024 * 1024 },
+  fileFilter: (req, file, cb) => {
+    const allowedTypes = ['.jpg', '.jpeg', '.png', '.gif', '.bmp', '.webp'];
+    const ext = path.extname(file.originalname).toLowerCase();
+    if (allowedTypes.includes(ext)) {
+      cb(null, true);
+    } else {
+      cb(new Error('不支持的图片格式，支持：JPG、PNG、GIF、BMP、WEBP'));
+    }
+  }
+});
+
+const createAttachmentUpload = () => multer({
+  storage: getStorage('achievements'),
+  limits: { fileSize: 50 * 1024 * 1024 },
+  fileFilter: (req, file, cb) => {
+    const allowedTypes = [
+      '.pdf', '.doc', '.docx', '.xls', '.xlsx', '.ppt', '.pptx',
+      '.jpg', '.jpeg', '.png', '.gif', '.bmp', '.webp',
+      '.txt', '.zip', '.rar'
+    ];
+    const ext = path.extname(file.originalname).toLowerCase();
+    if (allowedTypes.includes(ext)) {
+      cb(null, true);
+    } else {
+      cb(new Error('不支持的文件格式，支持：PDF、Office文档、图片、压缩包'));
+    }
+  }
+});
 
 router.get('/', optionalAuthMiddleware, async (req, res) => {
   try {
@@ -132,49 +186,62 @@ router.get('/categories', async (req, res) => {
   }
 });
 
-router.get('/:id', optionalAuthMiddleware, async (req, res) => {
-  try {
-    const { id } = req.params;
-    const certId = parseInt(id);
-
-    const cert = await db.getById('certificates', certId);
-    if (!cert) {
-      return res.status(404).json({ code: 404, message: '证书不存在' });
+router.post('/upload/image', authMiddleware, adminMiddleware, (req, res) => {
+  const upload = createImageUpload().single('file');
+  upload(req, res, (err) => {
+    if (err instanceof multer.MulterError) {
+      if (err.code === 'LIMIT_FILE_SIZE') {
+        return res.status(400).json({ code: 400, message: '图片大小不能超过10MB' });
+      }
+      return res.status(400).json({ code: 400, message: '图片上传失败：' + err.message });
+    }
+    if (err) {
+      return res.status(400).json({ code: 400, message: err.message });
+    }
+    if (!req.file) {
+      return res.status(400).json({ code: 400, message: '请选择要上传的图片' });
     }
 
-    const issuanceCount = await db.count(
-      'certificate_issuances',
-      i => i.certificate_id === certId,
-      'SELECT COUNT(*) as c FROM certificate_issuances WHERE certificate_id = ?',
-      [certId]
-    );
-
-    let myIssuance = null;
-    if (req.user) {
-      myIssuance = await db.findOne(
-        'certificate_issuances',
-        i => i.certificate_id === certId && i.user_id === req.user.id,
-        'SELECT * FROM certificate_issuances WHERE certificate_id = ? AND user_id = ? LIMIT 1',
-        [certId, req.user.id]
-      );
-    }
-
-    const creator = await db.getById('users', cert.created_by);
-
+    const relativePath = `/uploads/certificates/${req.file.filename}`;
     res.json({
       code: 200,
-      message: '获取成功',
+      message: '上传成功',
       data: {
-        ...cert,
-        issuance_count: issuanceCount,
-        my_issuance: myIssuance,
-        creator_name: creator ? creator.real_name : '未知'
+        url: relativePath,
+        filename: req.file.originalname,
+        size: req.file.size
       }
     });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ code: 500, message: '服务器内部错误', error: err.message });
-  }
+  });
+});
+
+router.post('/upload/attachment', authMiddleware, (req, res) => {
+  const upload = createAttachmentUpload().single('file');
+  upload(req, res, (err) => {
+    if (err instanceof multer.MulterError) {
+      if (err.code === 'LIMIT_FILE_SIZE') {
+        return res.status(400).json({ code: 400, message: '文件大小不能超过50MB' });
+      }
+      return res.status(400).json({ code: 400, message: '文件上传失败：' + err.message });
+    }
+    if (err) {
+      return res.status(400).json({ code: 400, message: err.message });
+    }
+    if (!req.file) {
+      return res.status(400).json({ code: 400, message: '请选择要上传的文件' });
+    }
+
+    const relativePath = `/uploads/achievements/${req.file.filename}`;
+    res.json({
+      code: 200,
+      message: '上传成功',
+      data: {
+        url: relativePath,
+        filename: req.file.originalname,
+        size: req.file.size
+      }
+    });
+  });
 });
 
 router.get('/my/list', authMiddleware, async (req, res) => {
@@ -463,6 +530,198 @@ router.delete('/achievements/:id', authMiddleware, async (req, res) => {
   }
 });
 
+router.get('/stats/overview', authMiddleware, adminMiddleware, async (req, res) => {
+  try {
+    let totalCertificates, totalHonors, activeCerts, totalIssuances;
+    let byCategory, byMonth;
+
+    if (db.useMySQL) {
+      const [tc] = await db.exec("SELECT COUNT(*) as count FROM certificates WHERE type = 'certificate'");
+      const [th] = await db.exec("SELECT COUNT(*) as count FROM certificates WHERE type = 'honor'");
+      const [ac] = await db.exec("SELECT COUNT(*) as count FROM certificates WHERE status = 'active'");
+      const [ti] = await db.exec('SELECT COUNT(*) as count FROM certificate_issuances');
+
+      totalCertificates = tc.count;
+      totalHonors = th.count;
+      activeCerts = ac.count;
+      totalIssuances = ti.count;
+
+      byCategory = await db.exec(
+        `SELECT category, COUNT(*) as count, 
+                (SELECT COUNT(*) FROM certificate_issuances i WHERE i.certificate_id IN 
+                  (SELECT id FROM certificates c WHERE c.category = cert.category)) as issuance_count
+         FROM certificates cert
+         WHERE category IS NOT NULL AND category != ''
+         GROUP BY category
+         ORDER BY count DESC`
+      );
+
+      byMonth = await db.exec(
+        `SELECT DATE_FORMAT(issue_date, '%Y-%m') as month, COUNT(*) as count
+         FROM certificate_issuances
+         WHERE issue_date IS NOT NULL
+         GROUP BY DATE_FORMAT(issue_date, '%Y-%m')
+         ORDER BY month DESC
+         LIMIT 12`
+      );
+    } else {
+      const certs = await db.getAll('certificates');
+      totalCertificates = certs.filter(c => c.type === 'certificate').length;
+      totalHonors = certs.filter(c => c.type === 'honor').length;
+      activeCerts = certs.filter(c => c.status === 'active').length;
+
+      const issuances = await db.getAll('certificate_issuances');
+      totalIssuances = issuances.length;
+
+      const categoryMap = {};
+      certs.forEach(c => {
+        if (c.category) {
+          if (!categoryMap[c.category]) {
+            categoryMap[c.category] = { category: c.category, count: 0, issuance_count: 0 };
+          }
+          categoryMap[c.category].count++;
+        }
+      });
+
+      issuances.forEach(i => {
+        const cert = certs.find(c => c.id === i.certificate_id);
+        if (cert && cert.category && categoryMap[cert.category]) {
+          categoryMap[cert.category].issuance_count++;
+        }
+      });
+
+      byCategory = Object.values(categoryMap).sort((a, b) => b.count - a.count);
+
+      const monthMap = {};
+      issuances.forEach(i => {
+        if (i.issue_date) {
+          const month = new Date(i.issue_date).toISOString().slice(0, 7);
+          if (!monthMap[month]) {
+            monthMap[month] = { month, count: 0 };
+          }
+          monthMap[month].count++;
+        }
+      });
+
+      byMonth = Object.values(monthMap).sort((a, b) => b.month.localeCompare(a.month)).slice(0, 12);
+    }
+
+    res.json({
+      code: 200,
+      message: '获取成功',
+      data: {
+        total_certificates: totalCertificates,
+        total_honors: totalHonors,
+        active_certs: activeCerts,
+        total_issuances: totalIssuances,
+        by_category: byCategory,
+        by_month: byMonth
+      }
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ code: 500, message: '服务器内部错误', error: err.message });
+  }
+});
+
+router.get('/stats/ranking', authMiddleware, adminMiddleware, async (req, res) => {
+  try {
+    const limit = parseInt(req.query.limit) || 10;
+    let ranking;
+
+    if (db.useMySQL) {
+      ranking = await db.exec(
+        `SELECT u.id, u.real_name, u.branch, u.avatar,
+                COUNT(i.id) as cert_count,
+                COALESCE(SUM(c.points_reward), 0) as total_points
+         FROM users u
+         LEFT JOIN certificate_issuances i ON u.id = i.user_id
+         LEFT JOIN certificates c ON i.certificate_id = c.id
+         WHERE u.role = 'user'
+         GROUP BY u.id
+         ORDER BY cert_count DESC, total_points DESC
+         LIMIT ?`,
+        [limit]
+      );
+    } else {
+      const users = await db.findMany('users', u => u.role === 'user');
+      const issuances = await db.getAll('certificate_issuances');
+      const certs = await db.getAll('certificates');
+
+      ranking = users.map(user => {
+        const userIssuances = issuances.filter(i => i.user_id === user.id);
+        let totalPoints = 0;
+        userIssuances.forEach(i => {
+          const cert = certs.find(c => c.id === i.certificate_id);
+          if (cert) totalPoints += cert.points_reward || 0;
+        });
+
+        return {
+          id: user.id,
+          real_name: user.real_name,
+          branch: user.branch,
+          avatar: user.avatar,
+          cert_count: userIssuances.length,
+          total_points: totalPoints
+        };
+      }).sort((a, b) => b.cert_count - a.cert_count || b.total_points - a.total_points).slice(0, limit);
+    }
+
+    res.json({
+      code: 200,
+      message: '获取成功',
+      data: ranking
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ code: 500, message: '服务器内部错误', error: err.message });
+  }
+});
+
+router.delete('/issuances/:id', authMiddleware, adminMiddleware, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const issuanceId = parseInt(id);
+
+    const issuance = await db.getById('certificate_issuances', issuanceId);
+
+    if (!issuance) {
+      return res.status(404).json({ code: 404, message: '发放记录不存在' });
+    }
+
+    const cert = await db.getById('certificates', issuance.certificate_id);
+
+    if (cert && cert.points_reward && cert.points_reward > 0) {
+      await db.update(
+        'users',
+        issuance.user_id,
+        {},
+        'UPDATE users SET points = points - ? WHERE id = ?',
+        [cert.points_reward]
+      );
+
+      await db.insert(
+        'points_records',
+        {
+          user_id: issuance.user_id,
+          points: -cert.points_reward,
+          reason: `撤销证书：${cert.title}`,
+          type: 'deduct'
+        },
+        'INSERT INTO points_records (user_id, points, reason, type) VALUES (?, ?, ?, ?)',
+        [issuance.user_id, -cert.points_reward, `撤销证书：${cert.title}`, 'deduct']
+      );
+    }
+
+    await db.remove('certificate_issuances', issuanceId);
+
+    res.json({ code: 200, message: '撤销成功' });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ code: 500, message: '服务器内部错误', error: err.message });
+  }
+});
+
 router.post('/', authMiddleware, adminMiddleware, async (req, res) => {
   try {
     const d = req.body;
@@ -492,6 +751,51 @@ router.post('/', authMiddleware, adminMiddleware, async (req, res) => {
     );
 
     res.json({ code: 200, message: '创建成功', data: cert });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ code: 500, message: '服务器内部错误', error: err.message });
+  }
+});
+
+router.get('/:id', optionalAuthMiddleware, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const certId = parseInt(id);
+
+    const cert = await db.getById('certificates', certId);
+    if (!cert) {
+      return res.status(404).json({ code: 404, message: '证书不存在' });
+    }
+
+    const issuanceCount = await db.count(
+      'certificate_issuances',
+      i => i.certificate_id === certId,
+      'SELECT COUNT(*) as c FROM certificate_issuances WHERE certificate_id = ?',
+      [certId]
+    );
+
+    let myIssuance = null;
+    if (req.user) {
+      myIssuance = await db.findOne(
+        'certificate_issuances',
+        i => i.certificate_id === certId && i.user_id === req.user.id,
+        'SELECT * FROM certificate_issuances WHERE certificate_id = ? AND user_id = ? LIMIT 1',
+        [certId, req.user.id]
+      );
+    }
+
+    const creator = await db.getById('users', cert.created_by);
+
+    res.json({
+      code: 200,
+      message: '获取成功',
+      data: {
+        ...cert,
+        issuance_count: issuanceCount,
+        my_issuance: myIssuance,
+        creator_name: creator ? creator.real_name : '未知'
+      }
+    });
   } catch (err) {
     console.error(err);
     res.status(500).json({ code: 500, message: '服务器内部错误', error: err.message });
@@ -732,198 +1036,6 @@ router.post('/:id/issue', authMiddleware, adminMiddleware, async (req, res) => {
     }
 
     res.json({ code: 200, message: '发放成功', data: issuance });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ code: 500, message: '服务器内部错误', error: err.message });
-  }
-});
-
-router.delete('/issuances/:id', authMiddleware, adminMiddleware, async (req, res) => {
-  try {
-    const { id } = req.params;
-    const issuanceId = parseInt(id);
-
-    const issuance = await db.getById('certificate_issuances', issuanceId);
-
-    if (!issuance) {
-      return res.status(404).json({ code: 404, message: '发放记录不存在' });
-    }
-
-    const cert = await db.getById('certificates', issuance.certificate_id);
-
-    if (cert && cert.points_reward && cert.points_reward > 0) {
-      await db.update(
-        'users',
-        issuance.user_id,
-        {},
-        'UPDATE users SET points = points - ? WHERE id = ?',
-        [cert.points_reward]
-      );
-
-      await db.insert(
-        'points_records',
-        {
-          user_id: issuance.user_id,
-          points: -cert.points_reward,
-          reason: `撤销证书：${cert.title}`,
-          type: 'deduct'
-        },
-        'INSERT INTO points_records (user_id, points, reason, type) VALUES (?, ?, ?, ?)',
-        [issuance.user_id, -cert.points_reward, `撤销证书：${cert.title}`, 'deduct']
-      );
-    }
-
-    await db.remove('certificate_issuances', issuanceId);
-
-    res.json({ code: 200, message: '撤销成功' });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ code: 500, message: '服务器内部错误', error: err.message });
-  }
-});
-
-router.get('/stats/overview', authMiddleware, adminMiddleware, async (req, res) => {
-  try {
-    let totalCertificates, totalHonors, activeCerts, totalIssuances;
-    let byCategory, byMonth;
-
-    if (db.useMySQL) {
-      const [tc] = await db.exec("SELECT COUNT(*) as count FROM certificates WHERE type = 'certificate'");
-      const [th] = await db.exec("SELECT COUNT(*) as count FROM certificates WHERE type = 'honor'");
-      const [ac] = await db.exec("SELECT COUNT(*) as count FROM certificates WHERE status = 'active'");
-      const [ti] = await db.exec('SELECT COUNT(*) as count FROM certificate_issuances');
-
-      totalCertificates = tc.count;
-      totalHonors = th.count;
-      activeCerts = ac.count;
-      totalIssuances = ti.count;
-
-      byCategory = await db.exec(
-        `SELECT category, COUNT(*) as count, 
-                (SELECT COUNT(*) FROM certificate_issuances i WHERE i.certificate_id IN 
-                  (SELECT id FROM certificates c WHERE c.category = cert.category)) as issuance_count
-         FROM certificates cert
-         WHERE category IS NOT NULL AND category != ''
-         GROUP BY category
-         ORDER BY count DESC`
-      );
-
-      byMonth = await db.exec(
-        `SELECT DATE_FORMAT(issue_date, '%Y-%m') as month, COUNT(*) as count
-         FROM certificate_issuances
-         WHERE issue_date IS NOT NULL
-         GROUP BY DATE_FORMAT(issue_date, '%Y-%m')
-         ORDER BY month DESC
-         LIMIT 12`
-      );
-    } else {
-      const certs = await db.getAll('certificates');
-      totalCertificates = certs.filter(c => c.type === 'certificate').length;
-      totalHonors = certs.filter(c => c.type === 'honor').length;
-      activeCerts = certs.filter(c => c.status === 'active').length;
-
-      const issuances = await db.getAll('certificate_issuances');
-      totalIssuances = issuances.length;
-
-      const categoryMap = {};
-      certs.forEach(c => {
-        if (c.category) {
-          if (!categoryMap[c.category]) {
-            categoryMap[c.category] = { category: c.category, count: 0, issuance_count: 0 };
-          }
-          categoryMap[c.category].count++;
-        }
-      });
-
-      issuances.forEach(i => {
-        const cert = certs.find(c => c.id === i.certificate_id);
-        if (cert && cert.category && categoryMap[cert.category]) {
-          categoryMap[cert.category].issuance_count++;
-        }
-      });
-
-      byCategory = Object.values(categoryMap).sort((a, b) => b.count - a.count);
-
-      const monthMap = {};
-      issuances.forEach(i => {
-        if (i.issue_date) {
-          const month = new Date(i.issue_date).toISOString().slice(0, 7);
-          if (!monthMap[month]) {
-            monthMap[month] = { month, count: 0 };
-          }
-          monthMap[month].count++;
-        }
-      });
-
-      byMonth = Object.values(monthMap).sort((a, b) => b.month.localeCompare(a.month)).slice(0, 12);
-    }
-
-    res.json({
-      code: 200,
-      message: '获取成功',
-      data: {
-        total_certificates: totalCertificates,
-        total_honors: totalHonors,
-        active_certs: activeCerts,
-        total_issuances: totalIssuances,
-        by_category: byCategory,
-        by_month: byMonth
-      }
-    });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ code: 500, message: '服务器内部错误', error: err.message });
-  }
-});
-
-router.get('/stats/ranking', authMiddleware, adminMiddleware, async (req, res) => {
-  try {
-    const limit = parseInt(req.query.limit) || 10;
-    let ranking;
-
-    if (db.useMySQL) {
-      ranking = await db.exec(
-        `SELECT u.id, u.real_name, u.branch, u.avatar,
-                COUNT(i.id) as cert_count,
-                COALESCE(SUM(c.points_reward), 0) as total_points
-         FROM users u
-         LEFT JOIN certificate_issuances i ON u.id = i.user_id
-         LEFT JOIN certificates c ON i.certificate_id = c.id
-         WHERE u.role = 'user'
-         GROUP BY u.id
-         ORDER BY cert_count DESC, total_points DESC
-         LIMIT ?`,
-        [limit]
-      );
-    } else {
-      const users = await db.findMany('users', u => u.role === 'user');
-      const issuances = await db.getAll('certificate_issuances');
-      const certs = await db.getAll('certificates');
-
-      ranking = users.map(user => {
-        const userIssuances = issuances.filter(i => i.user_id === user.id);
-        let totalPoints = 0;
-        userIssuances.forEach(i => {
-          const cert = certs.find(c => c.id === i.certificate_id);
-          if (cert) totalPoints += cert.points_reward || 0;
-        });
-
-        return {
-          id: user.id,
-          real_name: user.real_name,
-          branch: user.branch,
-          avatar: user.avatar,
-          cert_count: userIssuances.length,
-          total_points: totalPoints
-        };
-      }).sort((a, b) => b.cert_count - a.cert_count || b.total_points - a.total_points).slice(0, limit);
-    }
-
-    res.json({
-      code: 200,
-      message: '获取成功',
-      data: ranking
-    });
   } catch (err) {
     console.error(err);
     res.status(500).json({ code: 500, message: '服务器内部错误', error: err.message });

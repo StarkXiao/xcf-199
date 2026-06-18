@@ -238,19 +238,37 @@
           </div>
           <div class="form-group">
             <label>封面图片</label>
-            <input
-              v-model="achievementForm.cover_image"
-              type="text"
-              placeholder="请输入图片URL"
-            />
+            <div class="upload-field">
+              <div class="upload-preview small" v-if="achievementForm.cover_image">
+                <img :src="achievementForm.cover_image.startsWith('/') ? 'http://localhost:3000' + achievementForm.cover_image : achievementForm.cover_image" alt="封面预览">
+              </div>
+              <div class="upload-controls">
+                <input v-model="achievementForm.cover_image" type="text" placeholder="输入图片URL或选择文件上传" />
+                <label class="btn btn-secondary upload-btn" :class="{ disabled: uploadingCover }">
+                  <span v-if="uploadingCover">上传中...</span>
+                  <span v-else>📁 选择图片</span>
+                  <input type="file" accept="image/*" :disabled="uploadingCover" @change="handleAchievementCoverUpload" style="display:none;" />
+                </label>
+              </div>
+            </div>
           </div>
           <div class="form-group">
             <label>附件链接</label>
-            <input
-              v-model="achievementForm.attachment_url"
-              type="text"
-              placeholder="请输入附件链接"
-            />
+            <div class="upload-field">
+              <div class="upload-controls">
+                <input v-model="achievementForm.attachment_url" type="text" placeholder="输入附件URL或选择文件上传" />
+                <label class="btn btn-secondary upload-btn" :class="{ disabled: uploadingAttachment }">
+                  <span v-if="uploadingAttachment">上传中...</span>
+                  <span v-else>📎 上传附件</span>
+                  <input type="file" :disabled="uploadingAttachment" @change="handleAttachmentUpload" style="display:none;" />
+                </label>
+              </div>
+              <div v-if="achievementForm.attachment_url" class="attachment-link">
+                <a :href="achievementForm.attachment_url.startsWith('/') ? 'http://localhost:3000' + achievementForm.attachment_url : achievementForm.attachment_url" target="_blank">
+                  🔗 查看已上传附件
+                </a>
+              </div>
+            </div>
           </div>
           <div class="form-group">
             <label class="checkbox-label">
@@ -284,7 +302,9 @@ import {
   getAchievements,
   createAchievement,
   updateAchievement,
-  deleteAchievement as delAchievement
+  deleteAchievement as delAchievement,
+  uploadCertificateImage,
+  uploadAchievementAttachment
 } from '@/api/certificates'
 import type { CertificateIssuance, UserAchievement, CertificateStats } from '@/types'
 
@@ -315,6 +335,47 @@ const achievementForm = ref({
   attachment_url: '',
   is_public: 1
 })
+
+const uploadingCover = ref(false)
+const uploadingAttachment = ref(false)
+
+const handleAchievementCoverUpload = async (event: Event) => {
+  const input = event.target as HTMLInputElement
+  const file = input.files?.[0]
+  if (!file) return
+
+  uploadingCover.value = true
+  try {
+    const res = await uploadCertificateImage(file)
+    achievementForm.value.cover_image = res.data.url
+    alert('封面图片上传成功')
+  } catch (error: any) {
+    console.error('上传失败', error)
+    alert(error.response?.data?.message || '封面图片上传失败')
+  } finally {
+    uploadingCover.value = false
+    if (input) input.value = ''
+  }
+}
+
+const handleAttachmentUpload = async (event: Event) => {
+  const input = event.target as HTMLInputElement
+  const file = input.files?.[0]
+  if (!file) return
+
+  uploadingAttachment.value = true
+  try {
+    const res = await uploadAchievementAttachment(file)
+    achievementForm.value.attachment_url = res.data.url
+    alert('附件上传成功')
+  } catch (error: any) {
+    console.error('上传失败', error)
+    alert(error.response?.data?.message || '附件上传失败')
+  } finally {
+    uploadingAttachment.value = false
+    if (input) input.value = ''
+  }
+}
 
 const loadStats = async () => {
   try {
@@ -970,6 +1031,69 @@ onMounted(() => {
   gap: 10px;
   padding: 20px;
   border-top: 1px solid var(--border-color);
+}
+
+.upload-field {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.upload-preview {
+  width: 100%;
+  max-width: 200px;
+  border: 2px dashed var(--border-color);
+  border-radius: var(--radius-md);
+  padding: 8px;
+  background: var(--bg-light);
+}
+
+.upload-preview.small {
+  max-width: 120px;
+}
+
+.upload-preview img {
+  width: 100%;
+  height: auto;
+  border-radius: var(--radius-sm);
+  display: block;
+}
+
+.upload-controls {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
+.upload-controls input {
+  flex: 1;
+}
+
+.upload-btn {
+  cursor: pointer;
+  white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  user-select: none;
+}
+
+.upload-btn.disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.attachment-link {
+  font-size: 13px;
+}
+
+.attachment-link a {
+  color: var(--primary-color);
+  text-decoration: none;
+}
+
+.attachment-link a:hover {
+  text-decoration: underline;
 }
 
 @media (max-width: 768px) {

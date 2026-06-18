@@ -133,6 +133,12 @@ const router = createRouter({
           name: 'party-dues-payments',
           component: () => import('@/views/PartyDuesPayments.vue'),
           meta: { title: '缴纳记录', requiresAuth: true }
+        },
+        {
+          path: 'my-certificates',
+          name: 'my-certificates',
+          component: () => import('@/views/MyCertificates.vue'),
+          meta: { title: '证书荣誉', requiresAuth: true }
         }
       ]
     },
@@ -254,6 +260,12 @@ const router = createRouter({
           name: 'admin-dues-stats',
           component: () => import('@/views/admin/DuesStats.vue'),
           meta: { title: '管理后台 - 党费台账统计' }
+        },
+        {
+          path: 'certificates',
+          name: 'admin-certificates',
+          component: () => import('@/views/admin/Certificates.vue'),
+          meta: { title: '管理后台 - 证书荣誉管理' }
         }
       ]
     },

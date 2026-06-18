@@ -956,4 +956,104 @@ export interface DuesUnpaidItem {
   overdue_days: number
 }
 
+export type CertificateType = 'certificate' | 'honor'
+
+export type CertificateStatus = 'active' | 'inactive' | 'expired'
+
+export interface Certificate {
+  id: number
+  title: string
+  type: CertificateType
+  category: string
+  description: string
+  cover_image: string
+  certificate_image: string
+  issuer: string
+  issue_date: string
+  valid_from?: string
+  valid_to?: string
+  points_reward: number
+  status: CertificateStatus
+  created_by: number
+  created_at: string
+  updated_at: string
+  issuance_count?: number
+  has_issued?: boolean
+  creator_name?: string
+  my_issuance?: CertificateIssuance
+}
+
+export interface CertificateIssuance {
+  id: number
+  certificate_id: number
+  user_id: number
+  issue_date: string
+  issued_by?: number
+  issuer_name?: string
+  certificate_number: string
+  remarks: string
+  status: string
+  created_at: string
+  updated_at: string
+  title?: string
+  type?: CertificateType
+  category?: string
+  description?: string
+  cover_image?: string
+  certificate_image?: string
+  issuer?: string
+  points_reward?: number
+  cert_status?: CertificateStatus
+  real_name?: string
+  username?: string
+  avatar?: string
+  branch?: string
+  phone?: string
+}
+
+export interface UserAchievement {
+  id: number
+  user_id: number
+  title: string
+  type: string
+  description: string
+  achievement_date?: string
+  cover_image: string
+  attachment_url: string
+  is_public: number
+  sort_order: number
+  created_at: string
+  updated_at: string
+}
+
+export interface CertificateStats {
+  total_certificates: number
+  total_honors: number
+  total_points: number
+  total_achievements: number
+}
+
+export interface CertificateAdminStats {
+  total_certificates: number
+  total_honors: number
+  active_certs: number
+  total_issuances: number
+  by_category: { category: string; count: number; issuance_count: number }[]
+  by_month: { month: string; count: number }[]
+}
+
+export interface CertificateRanking {
+  id: number
+  real_name: string
+  branch: string
+  avatar: string
+  cert_count: number
+  total_points: number
+}
+
+export interface AchievementWithUser {
+  list: UserAchievement[]
+  user?: { id: number; real_name: string; avatar: string; branch: string }
+}
+
 

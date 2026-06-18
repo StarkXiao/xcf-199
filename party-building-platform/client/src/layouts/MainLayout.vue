@@ -19,6 +19,7 @@
           <router-link v-if="userStore.isLoggedIn" to="/party-development" class="nav-link" :class="{ active: $route.name === 'party-development' }">党员发展</router-link>
           <router-link v-if="userStore.isLoggedIn" to="/party-transfer" class="nav-link" :class="{ active: $route.name === 'party-transfer' }">组织转接</router-link>
           <router-link v-if="userStore.isLoggedIn" to="/party-dues" class="nav-link" :class="{ active: $route.name === 'party-dues' || $route.name === 'party-dues-payments' }">党费缴纳</router-link>
+          <router-link v-if="userStore.isLoggedIn" to="/my-certificates" class="nav-link" :class="{ active: $route.name === 'my-certificates' }">证书荣誉</router-link>
         </nav>
         <div class="header-right">
           <template v-if="userStore.isLoggedIn">
@@ -32,6 +33,9 @@
                 </router-link>
                 <router-link to="/my-volunteer" class="dropdown-item">
                   <span>🤝</span> 我的志愿服务
+                </router-link>
+                <router-link to="/my-certificates" class="dropdown-item">
+                  <span>🏆</span> 证书荣誉
                 </router-link>
                 <router-link v-if="userStore.isAdmin" to="/admin" class="dropdown-item">
                   <span>⚙️</span> 管理后台

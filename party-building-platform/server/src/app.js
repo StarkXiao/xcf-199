@@ -18,6 +18,7 @@ const branchMeetingRoutes = require('./routes/branchMeetings');
 const partyTransferRoutes = require('./routes/partyTransfer');
 const democraticReviewRoutes = require('./routes/democraticReview');
 const partyDuesRoutes = require('./routes/partyDues');
+const certificateRoutes = require('./routes/certificates');
 
 const app = express();
 
@@ -54,6 +55,7 @@ app.use('/api/branch-meetings', branchMeetingRoutes);
 app.use('/api/party-transfer', partyTransferRoutes);
 app.use('/api/democratic-review', democraticReviewRoutes);
 app.use('/api/party-dues', partyDuesRoutes);
+app.use('/api/certificates', certificateRoutes);
 
 app.use((req, res) => {
   res.status(404).json({ code: 404, message: '接口不存在' });

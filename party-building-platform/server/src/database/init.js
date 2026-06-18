@@ -431,6 +431,60 @@ function initDatabase() {
       FOREIGN KEY (review_id) REFERENCES democratic_reviews(id) ON DELETE CASCADE,
       FOREIGN KEY (operator_id) REFERENCES users(id) ON DELETE SET NULL
     );
+
+    CREATE TABLE IF NOT EXISTS certificates (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      title TEXT NOT NULL,
+      type TEXT NOT NULL DEFAULT 'certificate',
+      category TEXT NOT NULL,
+      description TEXT,
+      cover_image TEXT,
+      certificate_image TEXT,
+      issuer TEXT NOT NULL,
+      issue_date DATE,
+      valid_from DATE,
+      valid_to DATE,
+      points_reward INTEGER DEFAULT 0,
+      status TEXT DEFAULT 'active',
+      created_by INTEGER,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS certificate_issuances (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      certificate_id INTEGER NOT NULL,
+      user_id INTEGER NOT NULL,
+      issue_date DATETIME DEFAULT CURRENT_TIMESTAMP,
+      issued_by INTEGER,
+      issuer_name TEXT,
+      certificate_number TEXT,
+      remarks TEXT,
+      status TEXT DEFAULT 'issued',
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (certificate_id) REFERENCES certificates(id) ON DELETE CASCADE,
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+      FOREIGN KEY (issued_by) REFERENCES users(id) ON DELETE SET NULL,
+      UNIQUE(certificate_id, user_id)
+    );
+
+    CREATE TABLE IF NOT EXISTS user_achievements (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL,
+      title TEXT NOT NULL,
+      type TEXT NOT NULL,
+      description TEXT,
+      achievement_date DATE,
+      cover_image TEXT,
+      attachment_url TEXT,
+      is_public INTEGER DEFAULT 1,
+      sort_order INTEGER DEFAULT 0,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    );
   `);
 
   const adminHash = bcrypt.hashSync('admin123', 10);
@@ -1312,6 +1366,59 @@ function initDatabase() {
   `);
 
   insertDuesHistory.run(1, null, null, 'generate', `系统自动生成${currentDate.getFullYear()}年度党费账单`, 1, '系统管理员');
+
+  const insertCertificate = db.prepare(`
+    INSERT OR IGNORE INTO certificates (id, title, type, category, description, cover_image, certificate_image, issuer, issue_date, points_reward, status, created_by)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `);
+
+  const certificates = [
+    { id: 1, title: '党的二十大精神学习结业证书', type: 'certificate', category: '学习证书', description: '完成党的二十大精神专题学习并通过考核', cover_image: 'https://images.unsplash.com/photo-1529107386315-e1a2ed48a620?w=800', certificate_image: '', issuer: '市委党校', issue_date: '2024-06-15', points_reward: 30, status: 'active', created_by: 1 },
+    { id: 2, title: '优秀共产党员', type: 'honor', category: '活动荣誉', description: '2024年度优秀共产党员荣誉称号', cover_image: 'https://images.unsplash.com/photo-1559056199-641a0ac8b55e?w=800', certificate_image: '', issuer: '机关党委', issue_date: '2024-07-01', points_reward: 50, status: 'active', created_by: 1 },
+    { id: 3, title: '党史知识竞赛一等奖', type: 'honor', category: '活动荣誉', description: '在庆祝建党103周年党史知识竞赛中荣获一等奖', cover_image: 'https://images.unsplash.com/photo-1552664730-d307ca884978?w=800', certificate_image: '', issuer: '机关第一党支部', issue_date: '2024-06-30', points_reward: 40, status: 'active', created_by: 1 },
+    { id: 4, title: '志愿服务先进个人', type: 'honor', category: '活动荣誉', description: '2024年度志愿服务先进个人', cover_image: 'https://images.unsplash.com/photo-1559027615-cd4628902d4a?w=800', certificate_image: '', issuer: '志愿者协会', issue_date: '2024-05-04', points_reward: 35, status: 'active', created_by: 1 },
+    { id: 5, title: '学习强国学习标兵', type: 'certificate', category: '学习证书', description: '2024年第一季度"学习强国"学习标兵', cover_image: 'https://images.unsplash.com/photo-1497633762265-9d179a990aa6?w=800', certificate_image: '', issuer: '机关第一党支部', issue_date: '2024-04-01', points_reward: 25, status: 'active', created_by: 1 },
+    { id: 6, title: '民主评议优秀党员', type: 'honor', category: '活动荣誉', description: '2023年度民主评议优秀党员', cover_image: 'https://images.unsplash.com/photo-1517245386807-bb43f82c33c4?w=800', certificate_image: '', issuer: '第一党支部', issue_date: '2024-01-15', points_reward: 45, status: 'active', created_by: 1 }
+  ];
+
+  certificates.forEach(cert => {
+    insertCertificate.run(cert.id, cert.title, cert.type, cert.category, cert.description, cert.cover_image, cert.certificate_image, cert.issuer, cert.issue_date, cert.points_reward, cert.status, cert.created_by);
+  });
+
+  const insertCertificateIssuance = db.prepare(`
+    INSERT OR IGNORE INTO certificate_issuances (id, certificate_id, user_id, issue_date, issued_by, issuer_name, certificate_number, remarks, status)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `);
+
+  const certificateIssuances = [
+    { id: 1, certificateId: 1, userId: 2, issueDate: '2024-06-15 10:00:00', issuedBy: 1, issuerName: '系统管理员', certificateNumber: 'CERT20240615001', remarks: '完成全部学习课程并通过考核', status: 'issued' },
+    { id: 2, certificateId: 2, userId: 2, issueDate: '2024-07-01 09:00:00', issuedBy: 1, issuerName: '系统管理员', certificateNumber: 'HONOR20240701001', remarks: '表彰其在2024年度表现突出', status: 'issued' },
+    { id: 3, certificateId: 3, userId: 2, issueDate: '2024-06-30 15:00:00', issuedBy: 1, issuerName: '系统管理员', certificateNumber: 'HONOR20240630001', remarks: '党史知识竞赛一等奖', status: 'issued' },
+    { id: 4, certificateId: 5, userId: 3, issueDate: '2024-04-01 10:00:00', issuedBy: 1, issuerName: '系统管理员', certificateNumber: 'CERT20240401001', remarks: '第一季度学习积分排名第一', status: 'issued' },
+    { id: 5, certificateId: 4, userId: 4, issueDate: '2024-05-04 09:00:00', issuedBy: 1, issuerName: '系统管理员', certificateNumber: 'HONOR20240504001', remarks: '志愿服务时长累计超过100小时', status: 'issued' },
+    { id: 6, certificateId: 6, userId: 4, issueDate: '2024-01-15 10:00:00', issuedBy: 1, issuerName: '系统管理员', certificateNumber: 'HONOR20240115001', remarks: '2023年度民主评议优秀', status: 'issued' }
+  ];
+
+  certificateIssuances.forEach(issue => {
+    insertCertificateIssuance.run(issue.id, issue.certificateId, issue.userId, issue.issueDate, issue.issuedBy, issue.issuerName, issue.certificateNumber, issue.remarks, issue.status);
+  });
+
+  const insertUserAchievement = db.prepare(`
+    INSERT OR IGNORE INTO user_achievements (id, user_id, title, type, description, achievement_date, cover_image, attachment_url, is_public, sort_order)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `);
+
+  const userAchievements = [
+    { id: 1, userId: 2, title: '完成100篇文章学习', type: 'learning', description: '累计完成100篇党建文章学习', achievementDate: '2024-05-20', coverImage: '', attachmentUrl: '', isPublic: 1, sortOrder: 1 },
+    { id: 2, userId: 2, title: '志愿服务时长突破100小时', type: 'volunteer', description: '累计参与志愿服务时长达到100小时', achievementDate: '2024-04-15', coverImage: '', attachmentUrl: '', isPublic: 1, sortOrder: 2 },
+    { id: 3, userId: 2, title: '党史知识竞赛一等奖', type: 'honor', description: '在庆祝建党103周年党史知识竞赛中荣获一等奖', achievementDate: '2024-06-30', coverImage: '', attachmentUrl: '', isPublic: 1, sortOrder: 3 },
+    { id: 4, userId: 3, title: '学习强国季度积分第一', type: 'learning', description: '2024年第一季度"学习强国"积分排名支部第一', achievementDate: '2024-04-01', coverImage: '', attachmentUrl: '', isPublic: 1, sortOrder: 1 },
+    { id: 5, userId: 4, title: '志愿服务先进个人', type: 'volunteer', description: '荣获2024年度志愿服务先进个人称号', achievementDate: '2024-05-04', coverImage: '', attachmentUrl: '', isPublic: 1, sortOrder: 1 }
+  ];
+
+  userAchievements.forEach(achievement => {
+    insertUserAchievement.run(achievement.id, achievement.userId, achievement.title, achievement.type, achievement.description, achievement.achievementDate, achievement.coverImage, achievement.attachmentUrl, achievement.isPublic, achievement.sortOrder);
+  });
 
   console.log('数据库初始化完成！');
   console.log('默认账号：admin / admin123 （管理员）');

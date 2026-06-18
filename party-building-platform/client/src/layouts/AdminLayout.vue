@@ -75,6 +75,11 @@
           <span class="nav-icon">📊</span>
           <span class="nav-text">党费台账统计</span>
         </router-link>
+        <div class="nav-divider"></div>
+        <router-link to="/admin/certificates" class="nav-item" :class="{ active: $route.name === 'admin-certificates' }">
+          <span class="nav-icon">🏆</span>
+          <span class="nav-text">证书荣誉管理</span>
+        </router-link>
       </nav>
       <div class="sidebar-footer">
         <router-link to="/" class="back-link">← 返回前台</router-link>
